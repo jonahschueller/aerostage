@@ -92,44 +92,29 @@ where
         )
     })
 }
+pub struct Aerospace;
 
-pub fn ensure_aerospace_installed() {
-    if which::which("aerospace").is_err() {
-        eprintln!("Error: 'aerospace' command not found. Please install Aerospace CLI tool.");
-        std::process::exit(1);
+impl Aerospace {
+    pub fn ensure_aerospace_installed() {
+        if which::which("aerospace").is_err() {
+            eprintln!("Error: 'aerospace' command not found. Please install Aerospace CLI tool.");
+            std::process::exit(1);
+        }
     }
-}
 
-pub fn aerospace_list_apps() {
-    let result = query_aerospace::<Vec<AerospaceApp>>(AerospaceCommand::ListApps, None);
-    match result {
-        Ok(output) => println!("{:#?}", output),
-        Err(error) => eprintln!("Error: {}", error),
+    pub fn list_apps() -> Result<Vec<AerospaceApp>, String> {
+        query_aerospace::<Vec<AerospaceApp>>(AerospaceCommand::ListApps, None)
     }
-}
 
-pub fn aerospace_list_workspaces() {
-    let result =
-        query_aerospace::<Vec<AerospaceWorkspace>>(AerospaceCommand::ListWorkspaces, Some("--all"));
-    match result {
-        Ok(output) => println!("{:#?}", output),
-        Err(error) => eprintln!("Error: {}", error),
+    pub fn list_workspaces() -> Result<Vec<AerospaceWorkspace>, String> {
+        query_aerospace(AerospaceCommand::ListWorkspaces, Some("--all"))
     }
-}
 
-pub fn aerospace_list_monitors() {
-    let result = query_aerospace::<Vec<AerospaceMonitor>>(AerospaceCommand::ListMonitors, None);
-    match result {
-        Ok(output) => println!("{:#?}", output),
-        Err(error) => eprintln!("Error: {}", error),
+    pub fn list_monitors() -> Result<Vec<AerospaceMonitor>, String> {
+        query_aerospace(AerospaceCommand::ListMonitors, None)
     }
-}
 
-pub fn aerospace_list_windows() {
-    let result =
-        query_aerospace::<Vec<AerospaceWindow>>(AerospaceCommand::ListWindows, Some("--all"));
-    match result {
-        Ok(output) => println!("{:#?}", output),
-        Err(error) => eprintln!("Error: {}", error),
+    pub fn list_windows() -> Result<Vec<AerospaceWindow>, String> {
+        query_aerospace(AerospaceCommand::ListWindows, Some("--all"))
     }
 }

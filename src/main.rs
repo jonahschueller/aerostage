@@ -1,9 +1,19 @@
 mod aerospace;
 
+use aerospace::Aerospace;
+
 fn main() {
-    aerospace::ensure_aerospace_installed();
-    aerospace::aerospace_list_apps();
-    aerospace::aerospace_list_workspaces();
-    aerospace::aerospace_list_monitors();
-    aerospace::aerospace_list_windows();
+    Aerospace::ensure_aerospace_installed();
+    Aerospace::list_apps()
+        .iter()
+        .for_each(|app| println!("{:#?}", app));
+    Aerospace::list_workspaces()
+        .iter()
+        .for_each(|workspace| println!("{:#?}", workspace));
+    Aerospace::list_monitors()
+        .iter()
+        .for_each(|monitor| println!("{:#?}", monitor));
+    Aerospace::list_windows()
+        .iter()
+        .for_each(|window| println!("{:#?}", window));
 }
