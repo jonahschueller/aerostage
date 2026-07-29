@@ -33,82 +33,66 @@ pub struct ArrangementWindow {
     pub float: bool,
 }
 
-/// Load a single arrangement from a TOML file
-///
-/// # Arguments
-///
-/// * `path` - Path to the TOML file containing the arrangement
-///
-/// # Returns
-///
-/// * `Result<Arrangement, String>` - The parsed arrangement or an error message
-pub fn load_arrangement<P: AsRef<Path>>(path: P) -> Result<Arrangement, String> {
-    let path = path.as_ref();
+impl Arrangement {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Arrangement, String> {
+        let path = path.as_ref();
 
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
 
-    toml::from_str(&content)
-        .map_err(|e| format!("Failed to parse TOML from '{}': {}", path.display(), e))
-}
+        let arrangement = toml::from_str(&content)
+            .map_err(|e| format!("Failed to parse TOML from '{}': {}", path.display(), e))?;
 
-/// Load all arrangements from a directory
-///
-/// # Arguments
-///
-/// * `dir` - Path to the directory containing TOML arrangement files
-///
-/// # Returns
-///
-/// * `Result<Vec<Arrangement>, String>` - Vector of parsed arrangements or an error message
-pub fn load_arrangements_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Arrangement>, String> {
-    let dir = dir.as_ref();
-
-    if !dir.is_dir() {
-        return Err(format!("'{}' is not a directory", dir.display()));
+        Ok(arrangement)
     }
 
-    let mut arrangements = Vec::new();
+    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Arrangement>, String> {
+        let dir = dir.as_ref();
 
-    let entries = fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read directory '{}': {}", dir.display(), e))?;
+        if !dir.is_dir() {
+            return Err(format!("'{}' is not a directory", dir.display()));
+        }
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let entries = fs::read_dir(dir)
+            .map_err(|e| format!("Failed to read directory '{}': {}", dir.display(), e))?;
 
-        let path = entry.path();
+        let mut arrangements = Vec::new();
 
-        // Only process .toml files
-        if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-            match load_arrangement(&path) {
-                Ok(arrangement) => arrangements.push(arrangement),
-                Err(e) => eprintln!("Warning: {}", e),
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+
+            let path = entry.path();
+
+            if path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                let arrangement = Arrangement::load_from_file(&path).map_err(|e| {
+                    format!(
+                        "Failed to load arrangement from file '{}': {}",
+                        path.display(),
+                        e
+                    )
+                })?;
+
+                arrangements.push(arrangement);
             }
         }
+
+        if arrangements.is_empty() {
+            return Err(format!(
+                "No arrangements found in directory '{}'",
+                dir.display()
+            ));
+        }
+
+        Ok(arrangements)
     }
 
-    Ok(arrangements)
-}
+    pub fn load_from_config() -> Result<Arrangement, String> {
+        let config_dir =
+            dirs::config_dir().ok_or_else(|| "Could not determine config directory".to_string())?;
 
-/// Load all arrangements from the default configuration directory
-///
-/// This loads arrangements from `~/.config/aerospace-arrangements/`
-///
-/// # Returns
-///
-/// * `Result<Vec<Arrangement>, String>` - Vector of parsed arrangements or an error message
-pub fn load_arrangements_from_config() -> Result<Vec<Arrangement>, String> {
-    let config_dir =
-        dirs::config_dir().ok_or_else(|| "Could not determine config directory".to_string())?;
+        let arrangements_dir = config_dir.join("aerospace-arrangements");
 
-    let arrangements_dir = config_dir.join("aerospace-arrangements");
-
-    if !arrangements_dir.exists() {
-        return Err(format!(
-            "Arrangements directory does not exist: '{}'",
-            arrangements_dir.display()
-        ));
+        Arrangement::load_from_dir(arrangements_dir)
+            .map_err(|e| format!("Failed to load arrangements from config directory: {}", e))
     }
-
-    load_arrangements_from_dir(arrangements_dir)
 }
