@@ -34,6 +34,8 @@ pub struct AerospaceWindow {
     pub window_title: String,
     #[serde(rename = "app-name")]
     pub app_name: String,
+    #[serde(rename = "workspace")]
+    pub workspace: String,
 }
 
 fn execute_aerospace_command(command: &str) -> Result<String, String> {
@@ -92,6 +94,19 @@ where
         )
     })
 }
+
+fn aerospace_output_format(included_fields: Vec<&str>) -> String {
+    included_fields
+        .iter()
+        .map(|field| format!("%{{{}}}", field))
+        .collect::<Vec<String>>()
+        .join(",")
+}
+
+fn aerospace_args(args: Vec<&str>) -> String {
+    args.join(" ")
+}
+
 pub struct Aerospace;
 
 impl Aerospace {
@@ -103,18 +118,27 @@ impl Aerospace {
     }
 
     pub fn list_apps() -> Result<Vec<AerospaceApp>, String> {
-        query_aerospace::<Vec<AerospaceApp>>(AerospaceCommand::ListApps, None)
+        let fields = aerospace_output_format(vec!["app-bundle-id", "app-name", "app-pid"]);
+        let args = aerospace_args(vec![&fields]);
+        query_aerospace::<Vec<AerospaceApp>>(AerospaceCommand::ListApps, Some(&args))
     }
 
     pub fn list_workspaces() -> Result<Vec<AerospaceWorkspace>, String> {
-        query_aerospace(AerospaceCommand::ListWorkspaces, Some("--all"))
+        let fields = aerospace_output_format(vec!["workspace"]);
+        let args = aerospace_args(vec!["--all", &fields]);
+        query_aerospace(AerospaceCommand::ListWorkspaces, Some(&args))
     }
 
     pub fn list_monitors() -> Result<Vec<AerospaceMonitor>, String> {
-        query_aerospace(AerospaceCommand::ListMonitors, None)
+        let fields = aerospace_output_format(vec!["monitor-id", "monitor-name"]);
+        let args = aerospace_args(vec![&fields]);
+        query_aerospace::<Vec<AerospaceMonitor>>(AerospaceCommand::ListMonitors, Some(&args))
     }
 
     pub fn list_windows() -> Result<Vec<AerospaceWindow>, String> {
-        query_aerospace(AerospaceCommand::ListWindows, Some("--all"))
+        let fields =
+            aerospace_output_format(vec!["window-id", "window-title", "app-name", "workspace"]);
+        let args = aerospace_args(vec!["--all", &fields]);
+        query_aerospace::<Vec<AerospaceWindow>>(AerospaceCommand::ListWindows, Some(&args))
     }
 }
