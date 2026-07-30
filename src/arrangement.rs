@@ -1,4 +1,3 @@
-use serde::de::DeserializeOwned;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Arrangement {
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
     #[serde(rename = "workspace")]
     pub workspaces: Vec<ArrangementWorkspace>,
 }
@@ -15,10 +14,10 @@ pub struct Arrangement {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ArrangementWorkspace {
     pub name: String,
-    pub layout: String,
-    pub monitor: Vec<String>,
-    #[serde(default)]
-    pub focus: bool,
+    // pub layout: String,
+    // pub monitor: Vec<String>,
+    // #[serde(default)]
+    // pub focus: bool,
     #[serde(rename = "window")]
     pub windows: Vec<ArrangementWindow>,
 }
@@ -27,13 +26,31 @@ pub struct ArrangementWorkspace {
 pub struct ArrangementWindow {
     pub app: String,
     pub title: Option<String>,
-    #[serde(rename = "launch-if-missing", default)]
-    pub launch_if_missing: bool,
-    #[serde(default)]
-    pub float: bool,
+    // #[serde(rename = "launch-if-missing", default)]
+    // pub launch_if_missing: bool,
+    // #[serde(default)]
+    // pub float: bool,
 }
 
 impl Arrangement {
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
+        match toml::to_string(self) {
+            Ok(toml_arrangement) => {
+                let write_res = fs::write(path, toml_arrangement);
+
+                if write_res.is_err() {
+                    return Err(String::from("Failed to write arrangement to file."));
+                }
+
+                Ok(())
+            }
+            Err(err) => Err(String::from(format!(
+                "Failed to serialize arragement: {}",
+                err
+            ))),
+        }
+    }
+
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Arrangement, String> {
         let path = path.as_ref();
 
@@ -86,7 +103,7 @@ impl Arrangement {
         Ok(arrangements)
     }
 
-    pub fn load_from_config() -> Result<Arrangement, String> {
+    pub fn load_from_config() -> Result<Vec<Arrangement>, String> {
         let config_dir =
             dirs::config_dir().ok_or_else(|| "Could not determine config directory".to_string())?;
 
