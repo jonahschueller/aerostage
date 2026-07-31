@@ -1,9 +1,9 @@
 use crate::aerospace::Aerospace;
 use crate::arrangement::{Arrangement, ArrangementWindow, ArrangementWorkspace};
 
-pub fn capture_arrangement(name: &str) -> Result<Arrangement, String> {
-    let workspaces = Aerospace::list_workspaces().unwrap();
-    let windows = Aerospace::list_windows().unwrap();
+pub fn capture_arrangement(aerospace: &Aerospace, name: &str) -> Result<Arrangement, String> {
+    let workspaces = aerospace.list_workspaces().unwrap();
+    let windows = aerospace.list_windows().unwrap();
 
     let workspaces: Vec<ArrangementWorkspace> = workspaces
         .iter()

@@ -1,5 +1,5 @@
 use serde::de::DeserializeOwned;
-use std::{fmt::format, process::Command};
+use std::{default, fmt::format, process::Command};
 
 use serde::Deserialize;
 
@@ -38,18 +38,26 @@ pub struct AerospaceWindow {
     pub workspace: String,
 }
 
-fn execute_aerospace_command(command: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("aerospace")
-        .arg(command)
-        .args(args)
-        .output()
-        .map_err(|err| format!("Failed to execute aerospace CLI: {}", err))?;
+pub trait CommandExecutor {
+    fn execute(&self, command: &str, args: &[&str]) -> Result<String, String>;
+}
 
-    if output.status.success() {
-        String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 output: {e}"))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(stderr.to_string())
+pub struct AerospaceCommandExecutor;
+
+impl CommandExecutor for AerospaceCommandExecutor {
+    fn execute(&self, command: &str, args: &[&str]) -> Result<String, String> {
+        let output = Command::new("aerospace")
+            .arg(command)
+            .args(args)
+            .output()
+            .map_err(|err| format!("Failed to execute aerospace CLI: {}", err))?;
+
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 output: {e}"))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(stderr.to_string())
+        }
     }
 }
 
@@ -71,36 +79,17 @@ impl AerospaceCommand {
     }
 }
 
-fn query_aerospace<T>(command: AerospaceCommand, args: &[&str]) -> Result<T, String>
-where
-    T: DeserializeOwned,
-{
-    let mut json_args = vec!["--json"];
-    json_args.extend_from_slice(args);
-
-    let output = execute_aerospace_command(command.as_str(), &json_args)?;
-
-    serde_json::from_str(&output).map_err(|error| {
-        format!(
-            "Failed to deserialize {} response: {}",
-            command.as_str(),
-            error
-        )
-    })
+pub struct Aerospace<E: CommandExecutor = AerospaceCommandExecutor> {
+    executor: E,
 }
 
-fn aerospace_output_format(included_fields: Vec<&str>) -> String {
-    format!(
-        "{}",
-        included_fields
-            .iter()
-            .map(|field| format!("%{{{}}}", field))
-            .collect::<Vec<String>>()
-            .join(" ")
-    )
+impl Default for Aerospace {
+    fn default() -> Self {
+        Self {
+            executor: AerospaceCommandExecutor {},
+        }
+    }
 }
-
-pub struct Aerospace;
 
 impl Aerospace {
     pub fn ensure_aerospace_installed() {
@@ -109,35 +98,141 @@ impl Aerospace {
             std::process::exit(1);
         }
     }
+}
 
-    pub fn list_apps() -> Result<Vec<AerospaceApp>, String> {
-        let fields = aerospace_output_format(vec!["app-bundle-id", "app-name", "app-pid"]);
-        query_aerospace::<Vec<AerospaceApp>>(AerospaceCommand::ListApps, &["--format", &fields])
+impl<E: CommandExecutor> Aerospace<E> {
+    pub fn new(executor: E) -> Self {
+        Self { executor }
     }
 
-    pub fn list_workspaces() -> Result<Vec<AerospaceWorkspace>, String> {
-        let fields = aerospace_output_format(vec!["workspace"]);
-        query_aerospace(
+    fn query_aerospace<T>(&self, command: AerospaceCommand, args: &[&str]) -> Result<T, String>
+    where
+        T: DeserializeOwned,
+    {
+        let mut json_args = vec!["--json"];
+        json_args.extend_from_slice(args);
+
+        let output = self.executor.execute(command.as_str(), &json_args)?;
+
+        serde_json::from_str(&output).map_err(|error| {
+            format!(
+                "Failed to deserialize {} response: {}",
+                command.as_str(),
+                error
+            )
+        })
+    }
+
+    fn aerospace_output_format(&self, included_fields: Vec<&str>) -> String {
+        format!(
+            "{}",
+            included_fields
+                .iter()
+                .map(|field| format!("%{{{}}}", field))
+                .collect::<Vec<String>>()
+                .join(" ")
+        )
+    }
+
+    pub fn list_apps(&self) -> Result<Vec<AerospaceApp>, String> {
+        let fields = self.aerospace_output_format(vec!["app-bundle-id", "app-name", "app-pid"]);
+        self.query_aerospace::<Vec<AerospaceApp>>(
+            AerospaceCommand::ListApps,
+            &["--format", &fields],
+        )
+    }
+
+    pub fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>, String> {
+        let fields = self.aerospace_output_format(vec!["workspace"]);
+        self.query_aerospace(
             AerospaceCommand::ListWorkspaces,
             &["--all", "--format", &fields],
         )
     }
 
-    pub fn list_monitors() -> Result<Vec<AerospaceMonitor>, String> {
-        let fields = aerospace_output_format(vec!["monitor-id", "monitor-name"]);
-        query_aerospace::<Vec<AerospaceMonitor>>(
+    pub fn list_monitors(&self) -> Result<Vec<AerospaceMonitor>, String> {
+        let fields = self.aerospace_output_format(vec!["monitor-id", "monitor-name"]);
+        self.query_aerospace::<Vec<AerospaceMonitor>>(
             AerospaceCommand::ListMonitors,
             &["--format", &fields],
         )
     }
 
-    pub fn list_windows() -> Result<Vec<AerospaceWindow>, String> {
-        let fields =
-            aerospace_output_format(vec!["window-id", "window-title", "app-name", "workspace"]);
+    pub fn list_windows(&self) -> Result<Vec<AerospaceWindow>, String> {
+        let fields = self.aerospace_output_format(vec![
+            "window-id",
+            "window-title",
+            "app-name",
+            "workspace",
+        ]);
 
-        query_aerospace::<Vec<AerospaceWindow>>(
+        self.query_aerospace::<Vec<AerospaceWindow>>(
             AerospaceCommand::ListWindows,
             &["--all", "--format", &fields],
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockAerospaceCommandExecutor {
+        result: Result<String, String>,
+    }
+
+    impl MockAerospaceCommandExecutor {
+        fn with_success(value: &str) -> MockAerospaceCommandExecutor {
+            MockAerospaceCommandExecutor {
+                result: Ok(value.to_string()),
+            }
+        }
+
+        fn with_failure(error: &str) -> MockAerospaceCommandExecutor {
+            MockAerospaceCommandExecutor {
+                result: Err(error.to_string()),
+            }
+        }
+    }
+
+    impl CommandExecutor for MockAerospaceCommandExecutor {
+        fn execute(&self, command: &str, args: &[&str]) -> Result<String, String> {
+            return self.result.clone();
+        }
+    }
+
+    #[test]
+    fn test_lists_apps_successfully() {
+        let executor = MockAerospaceCommandExecutor::with_success(
+            r#"[{
+                "app-name" : "TestApp",
+                "app-bundle-id" : "com.test.app",
+                "app-pid" : 42
+            }
+            ]"#,
+        );
+
+        let aerospace = Aerospace::new(executor);
+
+        let apps = aerospace.list_apps().expect("Should parse listed apps.");
+
+        assert_eq!(apps.len(), 1);
+
+        let test_app = apps.first().expect("Should have first app.");
+        assert_eq!(test_app.app_name, "TestApp");
+        assert_eq!(test_app.app_bundle_id, "com.test.app");
+        assert_eq!(test_app.app_pid, 42);
+    }
+
+    #[test]
+    fn test_lists_apps_failure() {
+        let executor =
+            MockAerospaceCommandExecutor::with_failure(r#"Failed to execute aerospace."#);
+
+        let aerospace = Aerospace::new(executor);
+
+        let apps = aerospace.list_apps();
+
+        assert!(apps.is_err());
     }
 }
