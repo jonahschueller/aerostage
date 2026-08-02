@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
     arrangement::{Arrangement, ArrangementWindow},
-    restore::resolution::WindowResolution,
+    restore::{resolution::WindowResolution, restore::RestoreAction::MoveToWorkspace},
 };
 
 #[derive(Debug)]
@@ -12,6 +12,17 @@ enum RestoreAction {
         workspace: String,
         target_window: AerospaceWindowId,
     },
+}
+
+impl RestoreAction {
+    fn execute(&self, aerospace: &Aerospace) -> Result<(), String> {
+        match self {
+            MoveToWorkspace {
+                workspace,
+                target_window,
+            } => aerospace.move_node_to_workspace(workspace, target_window),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -49,6 +60,14 @@ impl RestorePlan {
 
         Ok(RestorePlan { plan: actions })
     }
+
+    fn restore(&self, aerospace: &Aerospace) {
+        for action in &self.plan {
+            action
+                .execute(aerospace)
+                .expect("Failed to restore arrangement.")
+        }
+    }
 }
 
 pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<(), String> {
@@ -56,9 +75,10 @@ pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> 
 
     let resolution = dbg!(WindowResolution::resolve(arrangement, &live_windows));
 
-    let restore_plan = dbg!(RestorePlan::resolve(&resolution, &live_windows));
+    let restore_plan = dbg!(RestorePlan::resolve(&resolution, &live_windows))?;
 
-    // todo!("Restore plan using aerospace")
+    restore_plan.restore(aerospace);
+
     Ok(())
 }
 

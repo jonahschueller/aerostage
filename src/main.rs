@@ -3,6 +3,8 @@ mod arrangement;
 mod capture;
 mod restore;
 
+use std::time::Duration;
+
 use aerospace::Aerospace;
 
 use crate::capture::capture_arrangement;
@@ -31,6 +33,14 @@ fn main() {
             println!("{:#?}", arrangement);
 
             _ = arrangement.save_to_file("current_arrangement.toml");
+
+            let seconds = 5;
+
+            println!(
+                "Sleeping for {} seconds. Move some windows to see the plan.",
+                seconds
+            );
+            std::thread::sleep(Duration::from_secs(seconds));
 
             println!("Restoring arrangement: ");
             _ = restore::restore::restore_arrangement(&aerospace, &arrangement);

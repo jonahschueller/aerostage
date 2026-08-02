@@ -71,6 +71,7 @@ enum AerospaceCommand {
     ListWorkspaces,
     ListMonitors,
     ListWindows,
+    MoveNodeToWorkspace,
 }
 
 impl AerospaceCommand {
@@ -80,6 +81,7 @@ impl AerospaceCommand {
             AerospaceCommand::ListWorkspaces => "list-workspaces",
             AerospaceCommand::ListMonitors => "list-monitors",
             AerospaceCommand::ListWindows => "list-windows",
+            AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
         }
     }
 }
@@ -114,10 +116,7 @@ impl<E: CommandExecutor> Aerospace<E> {
     where
         T: DeserializeOwned,
     {
-        let mut json_args = vec!["--json"];
-        json_args.extend_from_slice(args);
-
-        let output = self.executor.execute(command.as_str(), &json_args)?;
+        let output = self.executor.execute(command.as_str(), &args)?;
 
         serde_json::from_str(&output).map_err(|error| {
             format!(
@@ -143,7 +142,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         let fields = self.aerospace_output_format(vec!["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
             AerospaceCommand::ListApps,
-            &["--format", &fields],
+            &["--format", &fields, "--json"],
         )
     }
 
@@ -151,7 +150,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         let fields = self.aerospace_output_format(vec!["workspace"]);
         self.query_aerospace(
             AerospaceCommand::ListWorkspaces,
-            &["--all", "--format", &fields],
+            &["--all", "--format", &fields, "--json"],
         )
     }
 
@@ -159,7 +158,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         let fields = self.aerospace_output_format(vec!["monitor-id", "monitor-name"]);
         self.query_aerospace::<Vec<AerospaceMonitor>>(
             AerospaceCommand::ListMonitors,
-            &["--format", &fields],
+            &["--format", &fields, "--json"],
         )
     }
 
@@ -174,7 +173,19 @@ impl<E: CommandExecutor> Aerospace<E> {
 
         self.query_aerospace::<Vec<AerospaceWindow>>(
             AerospaceCommand::ListWindows,
-            &["--all", "--format", &fields],
+            &["--all", "--format", &fields, "--json"],
+        )
+    }
+
+    pub fn move_node_to_workspace(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        window_id: &AerospaceWindowId,
+    ) -> Result<(), String> {
+        let win_id_arg = format!("{}", window_id);
+        self.query_aerospace(
+            AerospaceCommand::MoveNodeToWorkspace,
+            &["--window-id", &win_id_arg, workspace],
         )
     }
 }
