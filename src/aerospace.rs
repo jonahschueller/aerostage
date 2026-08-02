@@ -116,7 +116,10 @@ impl<E: CommandExecutor> Aerospace<E> {
     where
         T: DeserializeOwned,
     {
-        let output = self.executor.execute(command.as_str(), &args)?;
+        let mut json_args = vec!["--json"];
+        json_args.extend_from_slice(args);
+
+        let output = self.executor.execute(command.as_str(), &json_args)?;
 
         serde_json::from_str(&output).map_err(|error| {
             format!(
@@ -142,7 +145,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         let fields = self.aerospace_output_format(vec!["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
             AerospaceCommand::ListApps,
-            &["--format", &fields, "--json"],
+            &["--format", &fields],
         )
     }
 
@@ -150,7 +153,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         let fields = self.aerospace_output_format(vec!["workspace"]);
         self.query_aerospace(
             AerospaceCommand::ListWorkspaces,
-            &["--all", "--format", &fields, "--json"],
+            &["--all", "--format", &fields],
         )
     }
 
@@ -158,7 +161,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         let fields = self.aerospace_output_format(vec!["monitor-id", "monitor-name"]);
         self.query_aerospace::<Vec<AerospaceMonitor>>(
             AerospaceCommand::ListMonitors,
-            &["--format", &fields, "--json"],
+            &["--format", &fields],
         )
     }
 
@@ -173,7 +176,7 @@ impl<E: CommandExecutor> Aerospace<E> {
 
         self.query_aerospace::<Vec<AerospaceWindow>>(
             AerospaceCommand::ListWindows,
-            &["--all", "--format", &fields, "--json"],
+            &["--all", "--format", &fields],
         )
     }
 
@@ -183,10 +186,14 @@ impl<E: CommandExecutor> Aerospace<E> {
         window_id: &AerospaceWindowId,
     ) -> Result<(), String> {
         let win_id_arg = format!("{}", window_id);
-        self.query_aerospace(
-            AerospaceCommand::MoveNodeToWorkspace,
+
+        match self.executor.execute(
+            AerospaceCommand::MoveNodeToWorkspace.as_str(),
             &["--window-id", &win_id_arg, workspace],
-        )
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        }
     }
 }
 
