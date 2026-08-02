@@ -38,7 +38,7 @@ impl WindowResolverRule for UniqueBundleIdResolverRule {
     ) -> Option<ResolvedWindowMatch> {
         let mut bundle_id_matches = windows
             .iter()
-            .filter(|window| window.app_bundle_id == target.target_window.app);
+            .filter(|window| window.app_bundle_id == target.target_window.bundle_id);
 
         match (bundle_id_matches.next(), bundle_id_matches.next()) {
             (Some(first_match), None) => Some(ResolvedWindowMatch {

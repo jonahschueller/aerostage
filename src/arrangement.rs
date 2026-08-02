@@ -26,10 +26,10 @@ pub struct ArrangementWorkspace {
 pub struct ArrangementWindow {
     pub app: String,
     pub title: Option<String>,
-    // #[serde(rename = "launch-if-missing", default)]
-    // pub launch_if_missing: bool,
-    // #[serde(default)]
-    // pub float: bool,
+    pub bundle_id: String, // #[serde(rename = "launch-if-missing", default)]
+                           // pub launch_if_missing: bool,
+                           // #[serde(default)]
+                           // pub float: bool,
 }
 
 impl Arrangement {

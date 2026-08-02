@@ -15,6 +15,7 @@ pub fn capture_arrangement(aerospace: &Aerospace, name: &str) -> Result<Arrangem
                 .map(|window| ArrangementWindow {
                     app: window.app_name.clone(),
                     title: Some(window.window_title.clone()),
+                    bundle_id: window.app_bundle_id.clone(),
                 })
                 .collect();
 
