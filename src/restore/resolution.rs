@@ -181,7 +181,7 @@ pub struct WindowResolution {
 }
 
 impl WindowResolution {
-    pub fn resolve(arrangement: &Arrangement, windows: Vec<AerospaceWindow>) -> Self {
+    pub fn resolve(arrangement: &Arrangement, windows: &[AerospaceWindow]) -> Self {
         let resolver = WindowResolver::default();
 
         let (resolved_window_matches, unresolved_windows) = resolver.resolve(arrangement, &windows);

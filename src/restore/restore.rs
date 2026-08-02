@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use crate::{
-    aerospace::{Aerospace, AerospaceWindowId},
+    aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
     arrangement::{Arrangement, ArrangementWindow},
     restore::resolution::WindowResolution,
 };
@@ -19,28 +21,29 @@ struct RestorePlan {
 
 impl RestorePlan {
     fn resolve(
-        aerospace: &Aerospace,
         resolution: &WindowResolution,
+        live_windows: &[AerospaceWindow],
     ) -> Result<RestorePlan, String> {
-        let windows = aerospace.list_windows()?;
+        let live_workspace_lookup: HashMap<&AerospaceWindowId, &AerospaceWorkspaceId> =
+            live_windows
+                .iter()
+                .map(|w| (&w.window_id, &w.workspace))
+                .collect();
 
-        let actions = windows
+        let actions = resolution
+            .resolved_windows
             .iter()
-            .filter_map(|window| {
-                let Some(mapping) = resolution
-                    .resolved_windows
-                    .iter()
-                    .find(|matched| matched.window_id == window.window_id)
-                else {
-                    return None;
-                };
+            .filter_map(|mapping| {
+                let current_workspace = live_workspace_lookup.get(&mapping.window_id)?;
 
-                Some((window, mapping))
-            })
-            .filter(|(window, mapping)| window.workspace != mapping.target_workspace)
-            .map(|(window, mapping)| RestoreAction::MoveToWorkspace {
-                workspace: mapping.target_workspace.clone(),
-                target_window: window.window_id.clone(),
+                if *current_workspace != &mapping.target_workspace {
+                    Some(RestoreAction::MoveToWorkspace {
+                        workspace: mapping.target_workspace.clone(),
+                        target_window: mapping.window_id.clone(),
+                    })
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -49,13 +52,14 @@ impl RestorePlan {
 }
 
 pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<(), String> {
-    let windows = dbg!(aerospace.list_windows()?);
+    let live_windows = dbg!(aerospace.list_windows()?);
 
-    let resolution = dbg!(WindowResolution::resolve(arrangement, windows));
+    let resolution = dbg!(WindowResolution::resolve(arrangement, &live_windows));
 
-    let restore_plan = dbg!(RestorePlan::resolve(aerospace, &resolution));
+    let restore_plan = dbg!(RestorePlan::resolve(&resolution, &live_windows));
 
-    return Ok(());
+    // todo!("Restore plan using aerospace")
+    Ok(())
 }
 
 #[cfg(test)]
