@@ -3,6 +3,9 @@ use std::{default, fmt::format, process::Command};
 
 use serde::Deserialize;
 
+pub type AerospaceWindowId = i32;
+pub type AerospaceWorkspaceId = String;
+
 #[derive(Debug, Deserialize)]
 pub struct AerospaceApp {
     #[serde(rename = "app-bundle-id")]
@@ -15,7 +18,7 @@ pub struct AerospaceApp {
 
 #[derive(Debug, Deserialize)]
 pub struct AerospaceWorkspace {
-    pub workspace: String,
+    pub workspace: AerospaceWorkspaceId,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,16 +29,18 @@ pub struct AerospaceMonitor {
     pub monitor_name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AerospaceWindow {
     #[serde(rename = "window-id")]
-    pub window_id: i32,
+    pub window_id: AerospaceWindowId,
     #[serde(rename = "window-title")]
     pub window_title: String,
     #[serde(rename = "app-name")]
     pub app_name: String,
+    #[serde(rename = "app-bundle-id")]
+    pub app_bundle_id: String,
     #[serde(rename = "workspace")]
-    pub workspace: String,
+    pub workspace: AerospaceWorkspaceId,
 }
 
 pub trait CommandExecutor {
@@ -163,6 +168,7 @@ impl<E: CommandExecutor> Aerospace<E> {
             "window-id",
             "window-title",
             "app-name",
+            "app-bundle-id",
             "workspace",
         ]);
 
@@ -234,5 +240,45 @@ mod tests {
         let apps = aerospace.list_apps();
 
         assert!(apps.is_err());
+    }
+
+    #[test]
+    fn test_list_windows_successfully() {
+        let executor = MockAerospaceCommandExecutor::with_success(
+            r#"[{
+                "window-id" : 1,
+                "window-title" : "TestWindow",
+                "app-name" : "TestApp",
+                "workspace" : "TestWorkspace"
+            }
+            ]"#,
+        );
+
+        let aerospace = Aerospace::new(executor);
+
+        let windows = aerospace
+            .list_windows()
+            .expect("Should parse listed windows.");
+
+        assert_eq!(windows.len(), 1);
+
+        let test_window = windows.first().expect("Should have first window.");
+        assert_eq!(test_window.window_id, 1);
+        assert_eq!(test_window.window_title, "TestWindow");
+        assert_eq!(test_window.app_name, "TestApp");
+        assert_eq!(test_window.workspace, "TestWorkspace");
+    }
+
+    #[test]
+    fn test_list_windows_failure() {
+        let executor = MockAerospaceCommandExecutor::with_failure(
+            r#"ERROR: Failed to parse <output-format>. Unbalanced curly braces"#,
+        );
+
+        let aerospace = Aerospace::new(executor);
+
+        let windows = aerospace.list_windows();
+
+        assert!(windows.is_err());
     }
 }

@@ -11,7 +11,7 @@ pub struct Arrangement {
     pub workspaces: Vec<ArrangementWorkspace>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ArrangementWorkspace {
     pub name: String,
     // pub layout: String,
@@ -22,7 +22,7 @@ pub struct ArrangementWorkspace {
     pub windows: Vec<ArrangementWindow>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ArrangementWindow {
     pub app: String,
     pub title: Option<String>,
@@ -34,7 +34,7 @@ pub struct ArrangementWindow {
 
 impl Arrangement {
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-        match toml::to_string(self) {
+        match toml::to_string_pretty(&self) {
             Ok(toml_arrangement) => {
                 let write_res = fs::write(path, toml_arrangement);
 
