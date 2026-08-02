@@ -176,8 +176,8 @@ impl WindowResolver {
 
 #[derive(Debug)]
 pub struct WindowResolution {
-    resolved_windows: Vec<ResolvedWindowMatch>,
-    unresolved_windows: Vec<UnresolvedWindow>,
+    pub resolved_windows: Vec<ResolvedWindowMatch>,
+    pub unresolved_windows: Vec<UnresolvedWindow>,
 }
 
 impl WindowResolution {
