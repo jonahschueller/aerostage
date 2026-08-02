@@ -180,10 +180,10 @@ impl<E: CommandExecutor> Aerospace<E> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    struct MockAerospaceCommandExecutor {
+    pub struct MockAerospaceCommandExecutor {
         result: Result<String, String>,
     }
 

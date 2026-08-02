@@ -5,11 +5,9 @@ use crate::{
 };
 
 pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<(), String> {
-    let windows = aerospace.list_windows()?;
+    let windows = dbg!(aerospace.list_windows()?);
 
-    let resolution = WindowResolution::resolve(arrangement, windows);
-
-    todo!("Properly implement arrangement restore");
+    let resolution = dbg!(WindowResolution::resolve(arrangement, windows));
     return Ok(());
 }
 

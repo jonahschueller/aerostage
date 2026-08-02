@@ -1,6 +1,7 @@
 mod aerospace;
 mod arrangement;
 mod capture;
+mod restore;
 
 use aerospace::Aerospace;
 
@@ -30,6 +31,9 @@ fn main() {
             println!("{:#?}", arrangement);
 
             _ = arrangement.save_to_file("current_arrangement.toml");
+
+            println!("Restoring arrangement: ");
+            _ = restore::restore::restore_arrangement(&aerospace, &arrangement);
         }
         Err(err) => println!("Failed to capture arrangement: {}", err),
     }

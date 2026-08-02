@@ -4,17 +4,18 @@ use crate::{
 };
 use std::vec;
 
-struct ResolveTarget {
-    target_workspace: ArrangementWorkspace,
-    target_window: ArrangementWindow,
+struct ResolveTarget<'a> {
+    target_workspace: &'a ArrangementWorkspace,
+    target_window: &'a ArrangementWindow,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ResolvedWindowMatch {
     pub target_workspace: AerospaceWorkspaceId,
     pub window_id: AerospaceWindowId,
 }
 
+#[derive(Debug)]
 pub struct UnresolvedWindow {
     pub window_id: AerospaceWindowId,
 }
@@ -22,7 +23,7 @@ pub struct UnresolvedWindow {
 trait WindowResolverRule {
     fn match_window(
         &self,
-        windows: &Vec<AerospaceWindow>,
+        windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch>;
 }
@@ -32,21 +33,19 @@ struct UniqueBundleIdResolverRule {}
 impl WindowResolverRule for UniqueBundleIdResolverRule {
     fn match_window(
         &self,
-        windows: &Vec<AerospaceWindow>,
+        windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
-        let bundle_id_matches: Vec<&AerospaceWindow> = windows
+        let mut bundle_id_matches = windows
             .iter()
-            .filter(|window| window.app_bundle_id == target.target_window.app)
-            .collect();
+            .filter(|window| window.app_bundle_id == target.target_window.app);
 
-        if bundle_id_matches.len() == 1 {
-            Some(ResolvedWindowMatch {
+        match (bundle_id_matches.next(), bundle_id_matches.next()) {
+            (Some(first_match), None) => Some(ResolvedWindowMatch {
                 target_workspace: target.target_workspace.name.clone(),
-                window_id: bundle_id_matches.first().unwrap().window_id,
-            })
-        } else {
-            None
+                window_id: first_match.window_id,
+            }),
+            _ => None,
         }
     }
 }
@@ -64,47 +63,50 @@ impl Default for WindowResolver {
 }
 
 impl WindowResolver {
-    fn apply_rule(
-        windows: &mut Vec<AerospaceWindow>,
-        targets: &Vec<ResolveTarget>,
-        rule: &Box<dyn WindowResolverRule>,
-    ) -> Vec<ResolvedWindowMatch> {
-        targets
-            .iter()
-            .map(|target| rule.match_window(windows, target))
-            .filter(|matched| matched.is_some())
-            .map(|matched| matched.unwrap())
-            .collect()
-    }
-
     fn resolve(
         &self,
         arrangement: &Arrangement,
-        windows: &Vec<AerospaceWindow>,
+        windows: &[AerospaceWindow],
     ) -> (Vec<ResolvedWindowMatch>, Vec<UnresolvedWindow>) {
-        let mut resolve_targets: Vec<ResolveTarget> = arrangement
+        let mut pending_targets: Vec<ResolveTarget> = arrangement
             .workspaces
             .iter()
             .flat_map(|workspace| {
-                workspace.windows.iter().map(|window| ResolveTarget {
-                    target_workspace: workspace.clone(),
-                    target_window: window.clone(),
+                workspace.windows.iter().map(move |window| ResolveTarget {
+                    target_workspace: &workspace,
+                    target_window: &window,
                 })
             })
             .collect();
-        let mut working_window_set = windows.clone();
+
+        let mut available_windows = windows.to_vec();
+        let mut resolved_matches = Vec::new();
 
         for rule in &self.rules {
-            WindowResolver::apply_rule(&mut working_window_set, &resolve_targets, rule);
+            let mut remaining_targets = Vec::new();
+            for target in pending_targets {
+                if let Some(matched) = rule.match_window(&available_windows, &target) {
+                    available_windows.retain(|windows| windows.window_id != matched.window_id);
+                    resolved_matches.push(matched);
+                } else {
+                    remaining_targets.push(target);
+                }
+            }
+
+            pending_targets = remaining_targets;
         }
 
-        let mut resolved_window_matches = Vec::new();
-
-        let unresolved_windows = Vec::new();
-        (resolved_window_matches, unresolved_windows)
+        let unresolved_windows = available_windows
+            .iter()
+            .map(|window| UnresolvedWindow {
+                window_id: window.window_id,
+            })
+            .collect();
+        (resolved_matches, unresolved_windows)
     }
 }
 
+#[derive(Debug)]
 pub struct WindowResolution {
     resolved_windows: Vec<ResolvedWindowMatch>,
     unresolved_windows: Vec<UnresolvedWindow>,
@@ -119,6 +121,26 @@ impl WindowResolution {
         WindowResolution {
             resolved_windows: resolved_window_matches,
             unresolved_windows: unresolved_windows,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::aerospace::tests;
+
+    struct MockResolverRule {
+        resolved_window: Option<ResolvedWindowMatch>,
+    }
+
+    impl WindowResolverRule for MockResolverRule {
+        fn match_window(
+            &self,
+            windows: &[AerospaceWindow],
+            target: &ResolveTarget,
+        ) -> Option<ResolvedWindowMatch> {
+            self.resolved_window.clone()
         }
     }
 }
