@@ -50,6 +50,57 @@ impl WindowResolverRule for UniqueBundleIdResolverRule {
     }
 }
 
+struct UniqueAppNameResolverRule {}
+
+impl WindowResolverRule for UniqueAppNameResolverRule {
+    fn match_window(
+        &self,
+        windows: &[AerospaceWindow],
+        target: &ResolveTarget,
+    ) -> Option<ResolvedWindowMatch> {
+        let mut bundle_id_matches = windows
+            .iter()
+            .filter(|window| window.app_name == target.target_window.app);
+
+        match (bundle_id_matches.next(), bundle_id_matches.next()) {
+            (Some(first_match), None) => Some(ResolvedWindowMatch {
+                target_workspace: target.target_workspace.name.clone(),
+                window_id: first_match.window_id,
+            }),
+            _ => None,
+        }
+    }
+}
+
+struct ExactTitleMatchResolverRule {}
+
+impl WindowResolverRule for ExactTitleMatchResolverRule {
+    fn match_window(
+        &self,
+        windows: &[AerospaceWindow],
+        target: &ResolveTarget,
+    ) -> Option<ResolvedWindowMatch> {
+        let target_title = target.target_window.title.as_ref()?;
+
+        let mut bundle_id_matches = windows.iter().filter(|window| {
+            if window.window_title != *target_title {
+                return false;
+            }
+
+            window.app_bundle_id == target.target_window.bundle_id
+                || window.app_name == target.target_window.app
+        });
+
+        match (bundle_id_matches.next(), bundle_id_matches.next()) {
+            (Some(first_match), None) => Some(ResolvedWindowMatch {
+                target_workspace: target.target_workspace.name.clone(),
+                window_id: first_match.window_id,
+            }),
+            _ => None,
+        }
+    }
+}
+
 struct WindowResolver {
     rules: Vec<Box<dyn WindowResolverRule>>,
 }
@@ -57,7 +108,11 @@ struct WindowResolver {
 impl Default for WindowResolver {
     fn default() -> Self {
         WindowResolver {
-            rules: vec![Box::new(UniqueBundleIdResolverRule {})],
+            rules: vec![
+                Box::new(UniqueBundleIdResolverRule {}),
+                Box::new(UniqueAppNameResolverRule {}),
+                Box::new(ExactTitleMatchResolverRule {}),
+            ],
         }
     }
 }
