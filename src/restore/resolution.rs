@@ -137,18 +137,31 @@ impl WindowResolver {
         let mut available_windows = windows.to_vec();
         let mut resolved_matches = Vec::new();
 
-        for rule in &self.rules {
-            let mut remaining_targets = Vec::new();
-            for target in pending_targets {
-                if let Some(matched) = rule.match_window(&available_windows, &target) {
-                    available_windows.retain(|windows| windows.window_id != matched.window_id);
-                    resolved_matches.push(matched);
-                } else {
-                    remaining_targets.push(target);
+        let mut last_pending_count = pending_targets.len();
+
+        loop {
+            for rule in &self.rules {
+                let mut remaining_targets = Vec::new();
+                for target in pending_targets {
+                    if let Some(matched) = rule.match_window(&available_windows, &target) {
+                        available_windows.retain(|windows| windows.window_id != matched.window_id);
+                        resolved_matches.push(matched);
+                    } else {
+                        remaining_targets.push(target);
+                    }
+                }
+
+                pending_targets = remaining_targets;
+                last_pending_count = pending_targets.len();
+
+                if pending_targets.is_empty() {
+                    break;
                 }
             }
 
-            pending_targets = remaining_targets;
+            if last_pending_count == pending_targets.len() {
+                break;
+            }
         }
 
         let unresolved_windows = available_windows
