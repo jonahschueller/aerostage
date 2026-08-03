@@ -92,6 +92,7 @@ pub struct Aerospace<E: CommandExecutor = AerospaceCommandExecutor> {
 
 impl Default for Aerospace {
     fn default() -> Self {
+        Aerospace::ensure_aerospace_installed();
         Self {
             executor: AerospaceCommandExecutor {},
         }
