@@ -58,6 +58,21 @@ impl RestorePlan {
             })
             .collect();
 
+        resolution
+            .unresolved_windows
+            .iter()
+            .filter_map(|window| {
+                live_windows
+                    .iter()
+                    .find(|live| live.window_id == window.window_id)
+            })
+            .for_each(|window| {
+                println!(
+                    "Counld not restore window {} | {} | {}",
+                    window.window_title, window.app_name, window.app_bundle_id
+                )
+            });
+
         Ok(RestorePlan { plan: actions })
     }
 
