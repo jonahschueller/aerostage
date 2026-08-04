@@ -49,7 +49,7 @@ fn deprecated_main() {
             // std::thread::sleep(Duration::from_secs(seconds));
 
             println!("Restoring arrangement: ");
-            _ = restore::restore::restore_arrangement(&aerospace, &arrangement);
+            _ = restore::restore_arrangement(&aerospace, &arrangement);
         }
         Err(err) => println!("Failed to capture arrangement: {}", err),
     }

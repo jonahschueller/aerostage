@@ -1,2 +1,4 @@
 mod resolution;
-pub mod restore;
+mod restore;
+
+pub use restore::restore_arrangement;

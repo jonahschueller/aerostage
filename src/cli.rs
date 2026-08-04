@@ -7,7 +7,7 @@ use crate::{
     arrangement::Arrangement,
     capture::capture_arrangement,
     cli::Commands::{Capture, Restore},
-    restore,
+    restore::restore_arrangement,
 };
 
 #[derive(Parser)]
@@ -48,7 +48,7 @@ fn execute_restore(arrangement_name: String) {
     let arrangement = Arrangement::load_from_file(&arrangement_name)
         .expect(&format!("Failed to load arrangement: {}", arrangement_name));
 
-    restore::restore::restore_arrangement(&aerospace, &arrangement).expect(&format!(
+    restore_arrangement(&aerospace, &arrangement).expect(&format!(
         "Failed to resotre arrangement: {}",
         arrangement_name
     ))
