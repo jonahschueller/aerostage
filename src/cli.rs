@@ -1,5 +1,3 @@
-use std::process::exit;
-
 use clap::{Parser, Subcommand};
 
 use crate::{
@@ -49,7 +47,7 @@ fn execute_restore(arrangement_name: String) {
         .expect(&format!("Failed to load arrangement: {}", arrangement_name));
 
     restore_arrangement(&aerospace, &arrangement).expect(&format!(
-        "Failed to resotre arrangement: {}",
+        "Failed to restore arrangement: {}",
         arrangement_name
     ))
 }
