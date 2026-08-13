@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::{
@@ -28,16 +29,16 @@ pub enum Commands {
     },
 }
 
-fn execute_capture(output: String) {
+fn execute_capture(output: String) -> Result<()> {
     let aerospace = Aerospace::default();
 
     let arrangement =
-        capture_arrangement(&aerospace, &output).expect(&format!("Failed to capture arrangement"));
+        capture_arrangement(&aerospace, &output).expect("Failed to capture arrangement");
 
-    match arrangement.save_to_file(output.clone()) {
-        Ok(_) => println!("successfully captured arrangement to {}", output),
-        Err(err) => println!("Failed to save captured arrangement to {}: {}", output, err),
-    }
+    arrangement.save_to_file(output.clone())
+    //     Ok(_) => println!("successfully captured arrangement to {}", output),
+    //     Err(err) => println!("Failed to save captured arrangement to {}: {}", output, err),
+    // }
 }
 
 fn execute_restore(arrangement_name: String) {

@@ -1,5 +1,6 @@
+use anyhow::{Context, Ok, Result, ensure};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -33,83 +34,70 @@ pub struct ArrangementWindow {
 }
 
 impl Arrangement {
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-        match toml::to_string_pretty(&self) {
-            Ok(toml_arrangement) => {
-                let write_res = fs::write(path, toml_arrangement);
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let toml_arrangement = toml::to_string_pretty(&self)
+            .with_context(|| "Failed to convert arrangement to toml format.")?;
 
-                if write_res.is_err() {
-                    return Err(String::from("Failed to write arrangement to file."));
-                }
+        fs::write(path, toml_arrangement)
+            .with_context(|| "Failed to write arrangement to file.")?;
 
-                Ok(())
-            }
-            Err(err) => Err(String::from(format!(
-                "Failed to serialize arragement: {}",
-                err
-            ))),
-        }
+        Ok(())
     }
 
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Arrangement, String> {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Arrangement> {
         let path = path.as_ref();
 
         let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
+            .with_context(|| format!("Failed to read file '{}'.", path.display()))?;
 
         let arrangement = toml::from_str(&content)
-            .map_err(|e| format!("Failed to parse TOML from '{}': {}", path.display(), e))?;
+            .with_context(|| format!("Failed to parse TOML from '{}'.", path.display()))?;
 
         Ok(arrangement)
     }
 
-    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Arrangement>, String> {
+    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Arrangement>> {
         let dir = dir.as_ref();
 
-        if !dir.is_dir() {
-            return Err(format!("'{}' is not a directory", dir.display()));
-        }
+        ensure!(
+            !dir.is_dir(),
+            format!("'{}' is not a directory", dir.display())
+        );
 
         let entries = fs::read_dir(dir)
-            .map_err(|e| format!("Failed to read directory '{}': {}", dir.display(), e))?;
+            .with_context(|| format!("Failed to read directory '{}'", dir.display()))?;
 
         let mut arrangements = Vec::new();
 
         for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+            let entry = entry.with_context(|| "Failed to read directory entry.")?;
 
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-                let arrangement = Arrangement::load_from_file(&path).map_err(|e| {
-                    format!(
-                        "Failed to load arrangement from file '{}': {}",
-                        path.display(),
-                        e
-                    )
+                let arrangement = Arrangement::load_from_file(&path).with_context(|| {
+                    format!("Failed to load arrangement from file '{}'.", path.display())
                 })?;
 
                 arrangements.push(arrangement);
             }
         }
 
-        if arrangements.is_empty() {
-            return Err(format!(
-                "No arrangements found in directory '{}'",
-                dir.display()
-            ));
-        }
+        ensure!(
+            arrangements.is_empty(),
+            format!("No arrangements found in directory '{}'", dir.display())
+        );
 
         Ok(arrangements)
     }
 
-    pub fn load_from_config() -> Result<Vec<Arrangement>, String> {
-        let config_dir =
-            dirs::config_dir().ok_or_else(|| "Could not determine config directory".to_string())?;
+    pub fn load_from_config() -> Result<Vec<Arrangement>> {
+        let config_dir = dirs::config_dir()
+            .with_context(|| "Could not determine config directory".to_string())?;
 
         let arrangements_dir = config_dir.join("aerospace-arrangements");
 
         Arrangement::load_from_dir(arrangements_dir)
-            .map_err(|e| format!("Failed to load arrangements from config directory: {}", e))
+            .with_context(|| format!("Failed to load arrangements from config directory."))
     }
 }

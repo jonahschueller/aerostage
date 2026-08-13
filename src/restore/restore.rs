@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
+
 use crate::{
     aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
-    arrangement::{Arrangement, ArrangementWindow},
+    arrangement::Arrangement,
     restore::{resolution::WindowResolution, restore::RestoreAction::MoveToWorkspace},
 };
 
@@ -15,7 +17,7 @@ enum RestoreAction {
 }
 
 impl RestoreAction {
-    fn execute(&self, aerospace: &Aerospace) -> Result<(), String> {
+    fn execute(&self, aerospace: &Aerospace) -> Result<()> {
         match self {
             MoveToWorkspace {
                 workspace,
@@ -34,7 +36,7 @@ impl RestorePlan {
     fn resolve(
         resolution: &WindowResolution,
         live_windows: &[AerospaceWindow],
-    ) -> Result<RestorePlan, String> {
+    ) -> Result<RestorePlan> {
         let live_workspace_lookup: HashMap<&AerospaceWindowId, &AerospaceWorkspaceId> =
             live_windows
                 .iter()
@@ -85,7 +87,7 @@ impl RestorePlan {
     }
 }
 
-pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<(), String> {
+pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<()> {
     let live_windows = dbg!(aerospace.list_windows()?);
 
     let resolution = dbg!(WindowResolution::resolve(arrangement, &live_windows));
