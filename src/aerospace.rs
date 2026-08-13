@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use anyhow::{Context, Result, anyhow, ensure};
 
-pub type AerospaceWindowId = i32;
+pub type AerospaceWindowId = u32;
 pub type AerospaceWorkspaceId = String;
 
 #[derive(Debug, Deserialize)]
@@ -15,7 +15,7 @@ pub struct AerospaceApp {
     #[serde(rename = "app-name")]
     pub app_name: String,
     #[serde(rename = "app-pid")]
-    pub app_pid: i32,
+    pub app_pid: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,7 +95,6 @@ pub struct Aerospace<E: CommandExecutor = AerospaceCommandExecutor> {
 
 impl Default for Aerospace {
     fn default() -> Self {
-        Aerospace::ensure_aerospace_installed();
         Self {
             executor: AerospaceCommandExecutor {},
         }
@@ -116,14 +115,19 @@ impl<E: CommandExecutor> Aerospace<E> {
         Self { executor }
     }
 
-    fn query_aerospace<T>(&self, command: AerospaceCommand, args: &[&str]) -> Result<T>
+    fn execute_aerospace(&self, command: &AerospaceCommand, args: &[&str]) -> Result<String> {
+        self.executor.execute(command.as_str(), &args)
+    }
+
+    fn query_aerospace<T>(&self, command: &AerospaceCommand, args: &[&str]) -> Result<T>
     where
         T: DeserializeOwned,
     {
-        let mut json_args = vec!["--json"];
-        json_args.extend_from_slice(args);
+        let full_args: Vec<&str> = std::iter::once("--json")
+            .chain(args.iter().copied())
+            .collect();
 
-        let output = self.executor.execute(command.as_str(), &json_args)?;
+        let output = self.execute_aerospace(command, &full_args)?;
 
         serde_json::from_str(&output).map_err(|error| {
             anyhow!(
@@ -134,31 +138,28 @@ impl<E: CommandExecutor> Aerospace<E> {
         })
     }
 
-    fn aerospace_output_format(&self, included_fields: Vec<&str>) -> String {
-        format!(
-            "{}",
-            included_fields
-                .iter()
-                .map(|field| format!("%{{{}}}", field))
-                .collect::<Vec<String>>()
-                .join(" ")
-        )
+    fn aerospace_output_format(&self, included_fields: &[&str]) -> String {
+        included_fields
+            .iter()
+            .map(|field| format!("%{{{}}}", field))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     #[allow(dead_code)]
     pub fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
-        let fields = self.aerospace_output_format(vec!["app-bundle-id", "app-name", "app-pid"]);
+        let fields = self.aerospace_output_format(&["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
-            AerospaceCommand::ListApps,
+            &AerospaceCommand::ListApps,
             &["--format", &fields],
         )
         .with_context(|| "Failed to execute list-apps.")
     }
 
     pub fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
-        let fields = self.aerospace_output_format(vec!["workspace"]);
+        let fields = self.aerospace_output_format(&["workspace"]);
         self.query_aerospace(
-            AerospaceCommand::ListWorkspaces,
+            &AerospaceCommand::ListWorkspaces,
             &["--all", "--format", &fields],
         )
         .with_context(|| "Failed to execute list-workspaces.")
@@ -166,16 +167,16 @@ impl<E: CommandExecutor> Aerospace<E> {
 
     #[allow(dead_code)]
     pub fn list_monitors(&self) -> Result<Vec<AerospaceMonitor>> {
-        let fields = self.aerospace_output_format(vec!["monitor-id", "monitor-name"]);
+        let fields = self.aerospace_output_format(&["monitor-id", "monitor-name"]);
         self.query_aerospace::<Vec<AerospaceMonitor>>(
-            AerospaceCommand::ListMonitors,
+            &AerospaceCommand::ListMonitors,
             &["--format", &fields],
         )
         .with_context(|| "Failed to execute list-monitors.")
     }
 
     pub fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
-        let fields = self.aerospace_output_format(vec![
+        let fields = self.aerospace_output_format(&[
             "window-id",
             "window-title",
             "app-name",
@@ -184,7 +185,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         ]);
 
         self.query_aerospace::<Vec<AerospaceWindow>>(
-            AerospaceCommand::ListWindows,
+            &AerospaceCommand::ListWindows,
             &["--all", "--format", &fields],
         )
         .with_context(|| "Failed to execute list-windows.")
@@ -193,16 +194,15 @@ impl<E: CommandExecutor> Aerospace<E> {
     pub fn move_node_to_workspace(
         &self,
         workspace: &AerospaceWorkspaceId,
-        window_id: &AerospaceWindowId,
+        window_id: AerospaceWindowId,
     ) -> Result<()> {
         let win_id_arg = format!("{}", window_id);
 
-        self.executor
-            .execute(
-                AerospaceCommand::MoveNodeToWorkspace.as_str(),
-                &["--window-id", &win_id_arg, workspace],
-            )
-            .with_context(|| "Failed to execute list-windows.")?;
+        self.execute_aerospace(
+            &AerospaceCommand::MoveNodeToWorkspace,
+            &["--window-id", &win_id_arg, workspace],
+        )
+        .with_context(|| "Failed to execute move_node_to_workspace.")?;
 
         Ok(())
     }

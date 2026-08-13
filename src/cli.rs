@@ -30,18 +30,17 @@ pub enum Commands {
 }
 
 fn execute_capture(output: String) -> Result<()> {
+    Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
     let arrangement =
         capture_arrangement(&aerospace, &output).expect("Failed to capture arrangement");
 
     arrangement.save_to_file(output.clone())
-    //     Ok(_) => println!("successfully captured arrangement to {}", output),
-    //     Err(err) => println!("Failed to save captured arrangement to {}: {}", output, err),
-    // }
 }
 
 fn execute_restore(arrangement_name: String) {
+    Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
     let arrangement = Arrangement::load_from_file(&arrangement_name)

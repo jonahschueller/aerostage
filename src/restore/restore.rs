@@ -22,7 +22,7 @@ impl RestoreAction {
             MoveToWorkspace {
                 workspace,
                 target_window,
-            } => aerospace.move_node_to_workspace(workspace, target_window),
+            } => aerospace.move_node_to_workspace(workspace, target_window.clone()),
         }
     }
 }
@@ -88,11 +88,11 @@ impl RestorePlan {
 }
 
 pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<()> {
-    let live_windows = dbg!(aerospace.list_windows()?);
+    let live_windows = aerospace.list_windows()?;
 
-    let resolution = dbg!(WindowResolution::resolve(arrangement, &live_windows));
+    let resolution = WindowResolution::resolve(arrangement, &live_windows);
 
-    let restore_plan = dbg!(RestorePlan::resolve(&resolution, &live_windows))?;
+    let restore_plan = RestorePlan::resolve(&resolution, &live_windows)?;
 
     restore_plan.restore(aerospace);
 
