@@ -1,5 +1,5 @@
 use serde::de::DeserializeOwned;
-use std::process::Command;
+use std::{fmt::Display, process::Command};
 
 use serde::Deserialize;
 
@@ -77,15 +77,16 @@ enum AerospaceCommand {
     MoveNodeToWorkspace,
 }
 
-impl AerospaceCommand {
-    fn as_str(&self) -> &'static str {
-        match self {
+impl Display for AerospaceCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             AerospaceCommand::ListApps => "list-apps",
             AerospaceCommand::ListWorkspaces => "list-workspaces",
             AerospaceCommand::ListMonitors => "list-monitors",
             AerospaceCommand::ListWindows => "list-windows",
             AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
-        }
+        };
+        write!(f, "{s}")
     }
 }
 
@@ -116,7 +117,7 @@ impl<E: CommandExecutor> Aerospace<E> {
     }
 
     fn execute_aerospace(&self, command: &AerospaceCommand, args: &[&str]) -> Result<String> {
-        self.executor.execute(command.as_str(), &args)
+        self.executor.execute(&format!("{}", command), &args)
     }
 
     fn query_aerospace<T>(&self, command: &AerospaceCommand, args: &[&str]) -> Result<T>
@@ -129,13 +130,8 @@ impl<E: CommandExecutor> Aerospace<E> {
 
         let output = self.execute_aerospace(command, &full_args)?;
 
-        serde_json::from_str(&output).map_err(|error| {
-            anyhow!(
-                "Failed to deserialize {} response: {}",
-                command.as_str(),
-                error
-            )
-        })
+        serde_json::from_str(&output)
+            .map_err(|error| anyhow!("Failed to deserialize {} response: {}", command, error))
     }
 
     fn aerospace_output_format(&self, included_fields: &[&str]) -> String {

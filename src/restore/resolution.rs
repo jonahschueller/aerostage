@@ -9,6 +9,13 @@ struct ResolveTarget<'a> {
     target_window: &'a ArrangementWindow,
 }
 
+impl<'a> ResolveTarget<'a> {
+    fn matches_window_app(&self, window: &AerospaceWindow) -> bool {
+        self.target_window.app == window.app_name
+            || self.target_window.bundle_id == window.app_bundle_id
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedWindowMatch {
     pub target_workspace: AerospaceWorkspaceId,
@@ -87,11 +94,38 @@ impl WindowResolverRule for ExactTitleMatchResolverRule {
                 return false;
             }
 
-            window.app_bundle_id == target.target_window.bundle_id
-                || window.app_name == target.target_window.app
+            target.matches_window_app(window)
         });
 
         match (bundle_id_matches.next(), bundle_id_matches.next()) {
+            (Some(first_match), None) => Some(ResolvedWindowMatch {
+                target_workspace: target.target_workspace.name.clone(),
+                window_id: first_match.window_id,
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// Matches against windows which are already on the target workspace if they are
+/// from the target application.
+/// The rule only matches if there is exactly one window of this app on the target workspace
+struct TargetWorkspaceResolverRule {}
+
+impl WindowResolverRule for TargetWorkspaceResolverRule {
+    fn match_window(
+        &self,
+        windows: &[AerospaceWindow],
+        target: &ResolveTarget,
+    ) -> Option<ResolvedWindowMatch> {
+        let target_workspace = target.target_workspace;
+
+        let mut workspace_matches = windows
+            .iter()
+            .filter(|window| window.workspace == target_workspace.name)
+            .filter(|window| target.matches_window_app(window));
+
+        match (workspace_matches.next(), workspace_matches.next()) {
             (Some(first_match), None) => Some(ResolvedWindowMatch {
                 target_workspace: target.target_workspace.name.clone(),
                 window_id: first_match.window_id,
@@ -109,9 +143,10 @@ impl Default for WindowResolver {
     fn default() -> Self {
         WindowResolver {
             rules: vec![
+                Box::new(ExactTitleMatchResolverRule {}),
                 Box::new(UniqueBundleIdResolverRule {}),
                 Box::new(UniqueAppNameResolverRule {}),
-                Box::new(ExactTitleMatchResolverRule {}),
+                Box::new(TargetWorkspaceResolverRule {}),
             ],
         }
     }
@@ -137,13 +172,16 @@ impl WindowResolver {
         let mut available_windows = windows.to_vec();
         let mut resolved_matches = Vec::new();
 
-        let mut last_pending_count = pending_targets.len();
-
         loop {
+            let initial_pending_count = pending_targets.len();
+
             for rule in &self.rules {
                 let mut remaining_targets = Vec::new();
                 for target in pending_targets {
-                    if let Some(matched) = rule.match_window(&available_windows, &target) {
+                    let avail_slice: Vec<AerospaceWindow> =
+                        available_windows.iter().map(|w| w.clone()).collect();
+
+                    if let Some(matched) = rule.match_window(&avail_slice, &target) {
                         available_windows.retain(|windows| windows.window_id != matched.window_id);
                         resolved_matches.push(matched);
                     } else {
@@ -152,14 +190,13 @@ impl WindowResolver {
                 }
 
                 pending_targets = remaining_targets;
-                last_pending_count = pending_targets.len();
 
                 if pending_targets.is_empty() {
                     break;
                 }
             }
 
-            if last_pending_count == pending_targets.len() {
+            if pending_targets.len() == initial_pending_count {
                 break;
             }
         }

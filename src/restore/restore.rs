@@ -70,7 +70,7 @@ impl RestorePlan {
             })
             .for_each(|window| {
                 println!(
-                    "Counld not restore window {} | {} | {}",
+                    "Could not restore window {} | {} | {}",
                     window.window_title, window.app_name, window.app_bundle_id
                 )
             });
