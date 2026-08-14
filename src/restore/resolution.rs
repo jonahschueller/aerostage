@@ -3,6 +3,7 @@ use crate::{
     arrangement::{Arrangement, ArrangementWindow, ArrangementWorkspace},
 };
 use std::vec;
+use strsim::normalized_levenshtein;
 
 struct ResolveTarget<'a> {
     target_workspace: &'a ArrangementWorkspace,
@@ -135,6 +136,43 @@ impl WindowResolverRule for TargetWorkspaceResolverRule {
     }
 }
 
+struct TitleSimilarityResolverRule {
+    threshold: f64,
+}
+
+impl WindowResolverRule for TitleSimilarityResolverRule {
+    fn match_window(
+        &self,
+        windows: &[AerospaceWindow],
+        target: &ResolveTarget,
+    ) -> Option<ResolvedWindowMatch> {
+        let target_title = target.target_window.title.clone()?;
+
+        let app_window_candidates = windows
+            .iter()
+            .filter(|window| target.matches_window_app(window));
+
+        let mut ranked_matches: Vec<(&AerospaceWindow, f64)> = app_window_candidates
+            .map(|window| {
+                let score = normalized_levenshtein(&target_title, &window.window_title);
+
+                return (window, score);
+            })
+            .filter(|(_, score)| *score >= self.threshold)
+            .collect();
+
+        ranked_matches.sort_by(|a, b| a.1.total_cmp(&b.1));
+        ranked_matches.reverse();
+
+        let first_match = ranked_matches.first()?;
+
+        return Some(ResolvedWindowMatch {
+            target_workspace: target.target_workspace.name.clone(),
+            window_id: first_match.0.window_id,
+        });
+    }
+}
+
 struct WindowResolver {
     rules: Vec<Box<dyn WindowResolverRule>>,
 }
@@ -144,6 +182,7 @@ impl Default for WindowResolver {
         WindowResolver {
             rules: vec![
                 Box::new(ExactTitleMatchResolverRule {}),
+                Box::new(TitleSimilarityResolverRule { threshold: 0.5 }),
                 Box::new(UniqueBundleIdResolverRule {}),
                 Box::new(UniqueAppNameResolverRule {}),
                 Box::new(TargetWorkspaceResolverRule {}),

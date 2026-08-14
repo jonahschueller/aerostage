@@ -11,6 +11,7 @@ dependencies = [
  "dirs",
  "serde",
  "serde_json",
+ "strsim",
  "subprocess",
  "toml",
  "which",
