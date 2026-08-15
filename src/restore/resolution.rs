@@ -91,7 +91,7 @@ impl WindowResolverRule for ExactTitleMatchResolverRule {
         let target_title = target.target_window.title.as_ref()?;
 
         let mut bundle_id_matches = windows.iter().filter(|window| {
-            if window.window_title != *target_title {
+            if window.window_title.to_lowercase() != *target_title.to_lowercase() {
                 return false;
             }
 
@@ -154,7 +154,10 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
 
         let mut ranked_matches: Vec<(&AerospaceWindow, f64)> = app_window_candidates
             .map(|window| {
-                let score = normalized_levenshtein(&target_title, &window.window_title);
+                let score = normalized_levenshtein(
+                    &target_title.to_lowercase(),
+                    &window.window_title.to_lowercase(),
+                );
 
                 return (window, score);
             })
@@ -174,18 +177,20 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
 }
 
 struct WindowResolver {
+    fallback_workspace: Option<AerospaceWorkspaceId>,
     rules: Vec<Box<dyn WindowResolverRule>>,
 }
 
 impl Default for WindowResolver {
     fn default() -> Self {
         WindowResolver {
+            fallback_workspace: Some("Z".to_string()),
             rules: vec![
                 Box::new(ExactTitleMatchResolverRule {}),
                 Box::new(TitleSimilarityResolverRule { threshold: 0.5 }),
+                Box::new(TargetWorkspaceResolverRule {}),
                 Box::new(UniqueBundleIdResolverRule {}),
                 Box::new(UniqueAppNameResolverRule {}),
-                Box::new(TargetWorkspaceResolverRule {}),
             ],
         }
     }
@@ -217,15 +222,13 @@ impl WindowResolver {
             for rule in &self.rules {
                 let mut remaining_targets = Vec::new();
                 for target in pending_targets {
-                    let avail_slice: Vec<AerospaceWindow> =
-                        available_windows.iter().map(|w| w.clone()).collect();
-
-                    if let Some(matched) = rule.match_window(&avail_slice, &target) {
-                        available_windows.retain(|windows| windows.window_id != matched.window_id);
-                        resolved_matches.push(matched);
-                    } else {
+                    let Some(matched) = rule.match_window(&available_windows, &target) else {
                         remaining_targets.push(target);
-                    }
+                        continue;
+                    };
+
+                    available_windows.retain(|windows| windows.window_id != matched.window_id);
+                    resolved_matches.push(matched);
                 }
 
                 pending_targets = remaining_targets;
@@ -238,6 +241,19 @@ impl WindowResolver {
             if pending_targets.len() == initial_pending_count {
                 break;
             }
+        }
+
+        if let Some(fallback_workspace) = self.fallback_workspace.clone() {
+            let mut remaining_windows: Vec<ResolvedWindowMatch> = available_windows
+                .iter()
+                .map(|win| ResolvedWindowMatch {
+                    target_workspace: fallback_workspace.clone(),
+                    window_id: win.window_id,
+                })
+                .collect();
+
+            resolved_matches.append(&mut remaining_windows);
+            available_windows.clear();
         }
 
         let unresolved_windows = available_windows
