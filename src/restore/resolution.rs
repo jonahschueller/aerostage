@@ -1,10 +1,13 @@
 use crate::{
     aerospace::{AerospaceWindow, AerospaceWorkspaceId},
     arrangement::Arrangement,
-    restore::window_resolver_rules::{
-        ResolveTarget, ResolvedWindowMatch, TargetWorkspaceResolverRule, TitleMatchResolverRule,
-        TitleSimilarityResolverRule, UniqueAppNameResolverRule, UniqueBundleIdResolverRule,
-        UnresolvedWindow, WindowResolverRule,
+    restore::{
+        rule::WindowResolverRule,
+        rules::{
+            TargetWorkspaceResolverRule, TitleMatchResolverRule, TitleSimilarityResolverRule,
+            UniqueAppNameResolverRule, UniqueBundleIdResolverRule,
+        },
+        types::{ResolveTarget, ResolvedWindowMatch, UnresolvedWindow},
     },
 };
 use std::vec;
