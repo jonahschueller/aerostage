@@ -69,6 +69,33 @@ impl CommandExecutor for AerospaceCommandExecutor {
     }
 }
 
+#[cfg(test)]
+pub struct MockExecutor {
+    pub stdout: String,
+    pub should_succeed: bool,
+}
+
+#[cfg(test)]
+impl Default for MockExecutor {
+    fn default() -> Self {
+        Self {
+            stdout: "[]".to_string(),
+            should_succeed: true,
+        }
+    }
+}
+
+#[cfg(test)]
+impl CommandExecutor for MockExecutor {
+    fn execute(&self, _command: &str, _args: &[&str]) -> Result<String> {
+        if self.should_succeed {
+            Ok(self.stdout.clone())
+        } else {
+            Err(anyhow::anyhow!("Mocked CLI failure"))
+        }
+    }
+}
+
 enum AerospaceCommand {
     ListApps,
     ListWorkspaces,
@@ -106,6 +133,16 @@ impl Aerospace {
     pub fn ensure_aerospace_installed() {
         if which::which("aerospace").is_err() {
             panic!("Error: 'aerospace' command not found. Please install Aerospace CLI tool.");
+        }
+    }
+}
+
+#[cfg(test)]
+impl Aerospace<MockExecutor> {
+    #[cfg(test)]
+    fn mock() -> Self {
+        Self {
+            executor: MockExecutor::default(),
         }
     }
 }
@@ -201,6 +238,49 @@ impl<E: CommandExecutor> Aerospace<E> {
         .with_context(|| "Failed to execute move_node_to_workspace.")?;
 
         Ok(())
+    }
+}
+
+impl AerospaceWindow {
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        AerospaceWindow {
+            app_bundle_id: "com.example.test".into(),
+            app_name: "Test App".into(),
+            window_id: 0,
+            workspace: "1".into(),
+            window_title: "Test Title".into(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_bundle_id(mut self, bundle_id: &str) -> Self {
+        self.app_bundle_id = bundle_id.to_string();
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_window_id(mut self, window_id: u32) -> Self {
+        self.window_id = window_id;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_app_name(mut self, app_name: &str) -> Self {
+        self.app_name = app_name.to_string();
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_workspace(mut self, workspace: &str) -> Self {
+        self.workspace = workspace.to_string();
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_window_title(mut self, window_title: &str) -> Self {
+        self.window_title = window_title.to_string();
+        self
     }
 }
 

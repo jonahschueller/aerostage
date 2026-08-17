@@ -15,7 +15,7 @@ impl<'a> ResolveTarget<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedWindowMatch {
     pub target_workspace: AerospaceWorkspaceId,
     pub window_id: AerospaceWindowId,

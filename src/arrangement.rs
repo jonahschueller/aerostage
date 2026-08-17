@@ -101,3 +101,48 @@ impl Arrangement {
             .with_context(|| format!("Failed to load arrangements from config directory."))
     }
 }
+
+impl ArrangementWindow {
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        ArrangementWindow {
+            app: "Test App".into(),
+            title: Some("Test Title".into()),
+            bundle_id: "com.example.test".into(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_bundle_id(mut self, bundle_id: &str) -> Self {
+        self.bundle_id = bundle_id.to_string();
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_app(mut self, app: &str) -> Self {
+        self.app = app.to_string();
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_title(mut self, title: Option<&str>) -> Self {
+        self.title = title.map(|t| t.to_string());
+        self
+    }
+}
+
+impl ArrangementWorkspace {
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        ArrangementWorkspace {
+            name: "1".into(),
+            windows: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+}
