@@ -25,12 +25,12 @@ pub struct ArrangementWorkspace {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ArrangementWindow {
-    pub app: String,
+    pub app: Option<String>,
     pub title: Option<String>,
-    pub bundle_id: String, // #[serde(rename = "launch-if-missing", default)]
-                           // pub launch_if_missing: bool,
-                           // #[serde(default)]
-                           // pub float: bool,
+    pub bundle_id: Option<String>, // #[serde(rename = "launch-if-missing", default)]
+                                   // pub launch_if_missing: bool,
+                                   // #[serde(default)]
+                                   // pub float: bool,
 }
 
 impl Arrangement {
@@ -106,21 +106,21 @@ impl ArrangementWindow {
     #[cfg(test)]
     pub fn dummy() -> Self {
         ArrangementWindow {
-            app: "Test App".into(),
+            app: Some("Test App".into()),
             title: Some("Test Title".into()),
-            bundle_id: "com.example.test".into(),
+            bundle_id: Some("com.example.test".into()),
         }
     }
 
     #[cfg(test)]
     pub fn with_bundle_id(mut self, bundle_id: &str) -> Self {
-        self.bundle_id = bundle_id.to_string();
+        self.bundle_id = Some(bundle_id.to_string());
         self
     }
 
     #[cfg(test)]
     pub fn with_app(mut self, app: &str) -> Self {
-        self.app = app.to_string();
+        self.app = Some(app.to_string());
         self
     }
 

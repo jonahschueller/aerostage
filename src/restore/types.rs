@@ -10,8 +10,19 @@ pub struct ResolveTarget<'a> {
 
 impl<'a> ResolveTarget<'a> {
     pub fn matches_window_app(&self, window: &AerospaceWindow) -> bool {
-        self.target_window.app == window.app_name
-            || self.target_window.bundle_id == window.app_bundle_id
+        let app_matches = self
+            .target_window
+            .app
+            .as_deref()
+            .map_or(false, |app| app == window.app_name);
+
+        let bundle_id_matches = self
+            .target_window
+            .bundle_id
+            .as_deref()
+            .map_or(false, |bundle_id| bundle_id == window.app_bundle_id);
+
+        app_matches || bundle_id_matches
     }
 }
 

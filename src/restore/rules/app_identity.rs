@@ -14,9 +14,13 @@ impl WindowResolverRule for UniqueBundleIdResolverRule {
         windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
-        let mut bundle_id_matches = windows
-            .iter()
-            .filter(|window| window.app_bundle_id == target.target_window.bundle_id);
+        let mut bundle_id_matches = windows.iter().filter(|window| {
+            target
+                .target_window
+                .bundle_id
+                .as_deref()
+                .map_or(false, |bundle_id| window.app_bundle_id == bundle_id)
+        });
 
         match (bundle_id_matches.next(), bundle_id_matches.next()) {
             (Some(first_match), None) => Some(ResolvedWindowMatch {
@@ -36,9 +40,13 @@ impl WindowResolverRule for UniqueAppNameResolverRule {
         windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
-        let mut matches = windows
-            .iter()
-            .filter(|window| window.app_name == target.target_window.app);
+        let mut matches = windows.iter().filter(|window| {
+            target
+                .target_window
+                .app
+                .as_deref()
+                .map_or(false, |app| window.app_name == app)
+        });
 
         match (matches.next(), matches.next()) {
             (Some(first_match), None) => Some(ResolvedWindowMatch {

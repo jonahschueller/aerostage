@@ -13,9 +13,9 @@ pub fn capture_arrangement(aerospace: &Aerospace, name: &str) -> Result<Arrangem
                 .iter()
                 .filter(|window| window.workspace == workspace.workspace)
                 .map(|window| ArrangementWindow {
-                    app: window.app_name.clone(),
+                    app: Some(window.app_name.clone()),
                     title: Some(window.window_title.clone()),
-                    bundle_id: window.app_bundle_id.clone(),
+                    bundle_id: Some(window.app_bundle_id.clone()),
                 })
                 .collect();
 
