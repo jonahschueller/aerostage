@@ -6,6 +6,7 @@ use crate::{
     arrangement::Arrangement,
     capture::capture_arrangement,
     cli::Commands::{Capture, Restore},
+    config::Config,
     restore::restore_arrangement,
 };
 
@@ -29,36 +30,44 @@ pub enum Commands {
     },
 }
 
-fn execute_capture(output: String) -> Result<()> {
+fn execute_capture(output: String) {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
     let arrangement =
         capture_arrangement(&aerospace, &output).expect("Failed to capture arrangement");
 
-    arrangement.save_to_file(output.clone())
+    arrangement
+        .save_to_file(output.clone())
+        .expect("Failed to capture arrangement.")
 }
 
-fn execute_restore(arrangement_name: String) {
+fn execute_restore(arrangement_name: String, config: &Config) {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
-    let arrangement = Arrangement::load_from_file(&arrangement_name)
-        .expect(&format!("Failed to load arrangement: {}", arrangement_name));
+    let arrangement_path = config.arrangement_directory.join(&arrangement_name);
 
-    restore_arrangement(&aerospace, &arrangement).expect(&format!(
-        "Failed to restore arrangement: {}",
-        arrangement_name
-    ))
+    let arrangement = match Arrangement::load_from_file(&arrangement_path) {
+        Ok(a) => a,
+        Err(err) => {
+            eprintln!("Error loading arrangement '{arrangement_name}': {err}");
+            return;
+        }
+    };
+
+    if let Err(err) = restore_arrangement(&aerospace, &arrangement) {
+        eprintln!("Failed to restore arrangement '{arrangement_name}': {err}");
+    }
 }
 
-pub fn execute_command(command: Commands) {
+pub fn execute_command(command: Commands, config: &Config) {
     match command {
         Capture { output } => {
             execute_capture(output);
         }
         Restore { arrangement } => {
-            execute_restore(arrangement);
+            execute_restore(arrangement, config);
         }
     }
 }
