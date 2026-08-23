@@ -1,4 +1,3 @@
-use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::{
@@ -20,14 +19,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    Capture {
-        #[arg(short, long)]
-        output: String,
-    },
-    Restore {
-        #[arg(short, long)]
-        stage: String,
-    },
+    Capture { output: String },
+    Restore { stage: String },
 }
 
 fn execute_capture(output: String) {

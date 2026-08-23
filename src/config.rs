@@ -1,21 +1,34 @@
 use std::{fs, path::PathBuf};
 
+use anyhow::{Context, Result};
+
 pub struct Config {
     pub stage_directory: PathBuf,
 }
 
 impl Config {
     pub fn new() -> Config {
-        let home_dir = dirs::home_dir().expect("Failed to derive user home dir.");
-        let stage_dir = home_dir.join(".aerospace-stage");
+        let stage_dir = Self::default_stage_directory();
 
         Config {
             stage_directory: stage_dir,
         }
     }
 
-    pub fn make_stage_dir_if_not_exists(&self) {
-        _ = fs::create_dir_all(&self.stage_directory)
+    #[cfg(debug_assertions)]
+    fn default_stage_directory() -> PathBuf {
+        std::env::current_dir().expect("Failed to derive current working directory.")
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn default_stage_directory() -> PathBuf {
+        let home_dir = dirs::home_dir().expect("Failed to derive user home dir.");
+        home_dir.join(".aerostage")
+    }
+
+    pub fn make_stage_dir_if_not_exists(&self) -> Result<()> {
+        fs::create_dir_all(&self.stage_directory)
+            .with_context(|| "Failed to create stage directory.")
     }
 }
 
@@ -32,7 +45,7 @@ mod tests {
                 .stage_directory
                 .to_str()
                 .unwrap()
-                .ends_with(".aerospace-stage")
+                .ends_with(".aerostage")
         )
     }
 }
