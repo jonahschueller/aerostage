@@ -4,4 +4,4 @@ mod rule;
 mod rules;
 mod types;
 
-pub use restore::restore_arrangement;
+pub use restore::restore_stage;

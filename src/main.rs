@@ -1,9 +1,9 @@
 mod aerospace;
-mod arrangement;
 mod capture;
 mod cli;
 mod config;
 mod restore;
+mod stage;
 
 use clap::Parser;
 
@@ -13,7 +13,7 @@ fn main() {
     let cli = cli::Cli::parse();
 
     let config = Config::new();
-    config.make_arrangement_dir_if_not_exists();
+    config.make_stage_dir_if_not_exists();
 
     cli::execute_command(cli.command, &config);
 }

@@ -1,6 +1,5 @@
 use crate::{
     aerospace::{AerospaceWindow, AerospaceWorkspaceId},
-    arrangement::Arrangement,
     restore::{
         rule::WindowResolverRule,
         rules::{
@@ -9,6 +8,7 @@ use crate::{
         },
         types::{ResolveTarget, ResolvedWindowMatch, UnresolvedWindow},
     },
+    stage::Stage,
 };
 use std::vec;
 struct WindowResolver {
@@ -92,10 +92,10 @@ impl WindowResolver {
 
     fn resolve(
         &self,
-        arrangement: &Arrangement,
+        stage: &Stage,
         windows: &[AerospaceWindow],
     ) -> (Vec<ResolvedWindowMatch>, Vec<UnresolvedWindow>) {
-        let mut pending_targets: Vec<ResolveTarget> = arrangement
+        let mut pending_targets: Vec<ResolveTarget> = stage
             .workspaces
             .iter()
             .flat_map(|workspace| {
@@ -130,10 +130,10 @@ pub struct WindowResolution {
 }
 
 impl WindowResolution {
-    pub fn resolve(arrangement: &Arrangement, windows: &[AerospaceWindow]) -> Self {
+    pub fn resolve(stage: &Stage, windows: &[AerospaceWindow]) -> Self {
         let resolver = WindowResolver::default();
 
-        let (resolved_window_matches, unresolved_windows) = resolver.resolve(arrangement, &windows);
+        let (resolved_window_matches, unresolved_windows) = resolver.resolve(stage, &windows);
 
         WindowResolution {
             resolved_windows: resolved_window_matches,

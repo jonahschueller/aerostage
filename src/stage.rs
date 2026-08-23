@@ -5,26 +5,26 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Arrangement {
+pub struct Stage {
     pub name: String,
     pub description: Option<String>,
     #[serde(rename = "workspace")]
-    pub workspaces: Vec<ArrangementWorkspace>,
+    pub workspaces: Vec<StageWorkspace>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ArrangementWorkspace {
+pub struct StageWorkspace {
     pub name: String,
     // pub layout: String,
     // pub monitor: Vec<String>,
     // #[serde(default)]
     // pub focus: bool,
     #[serde(rename = "window")]
-    pub windows: Vec<ArrangementWindow>,
+    pub windows: Vec<StageWindow>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct ArrangementWindow {
+pub struct StageWindow {
     pub app: Option<String>,
     pub title: Option<String>,
     pub bundle_id: Option<String>, // #[serde(rename = "launch-if-missing", default)]
@@ -33,30 +33,29 @@ pub struct ArrangementWindow {
                                    // pub float: bool,
 }
 
-impl Arrangement {
+impl Stage {
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let toml_arrangement = toml::to_string_pretty(&self)
-            .with_context(|| "Failed to convert arrangement to toml format.")?;
+        let toml_stage = toml::to_string_pretty(&self)
+            .with_context(|| "Failed to convert stage to toml format.")?;
 
-        fs::write(path, toml_arrangement)
-            .with_context(|| "Failed to write arrangement to file.")?;
+        fs::write(path, toml_stage).with_context(|| "Failed to write stage to file.")?;
 
         Ok(())
     }
 
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Arrangement> {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Stage> {
         let path = path.as_ref();
 
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read file '{}'.", path.display()))?;
 
-        let arrangement = toml::from_str(&content)
+        let stage = toml::from_str(&content)
             .with_context(|| format!("Failed to parse TOML from '{}'.", path.display()))?;
 
-        Ok(arrangement)
+        Ok(stage)
     }
 
-    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Arrangement>> {
+    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Stage>> {
         let dir = dir.as_ref();
 
         ensure!(
@@ -67,7 +66,7 @@ impl Arrangement {
         let entries = fs::read_dir(dir)
             .with_context(|| format!("Failed to read directory '{}'", dir.display()))?;
 
-        let mut arrangements = Vec::new();
+        let mut stages = Vec::new();
 
         for entry in entries {
             let entry = entry.with_context(|| "Failed to read directory entry.")?;
@@ -75,37 +74,37 @@ impl Arrangement {
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-                let arrangement = Arrangement::load_from_file(&path).with_context(|| {
-                    format!("Failed to load arrangement from file '{}'.", path.display())
+                let stage = Stage::load_from_file(&path).with_context(|| {
+                    format!("Failed to load stage from file '{}'.", path.display())
                 })?;
 
-                arrangements.push(arrangement);
+                stages.push(stage);
             }
         }
 
         ensure!(
-            arrangements.is_empty(),
-            format!("No arrangements found in directory '{}'", dir.display())
+            stages.is_empty(),
+            format!("No stages found in directory '{}'", dir.display())
         );
 
-        Ok(arrangements)
+        Ok(stages)
     }
 
-    pub fn load_from_config() -> Result<Vec<Arrangement>> {
+    pub fn load_from_config() -> Result<Vec<Stage>> {
         let config_dir = dirs::config_dir()
             .with_context(|| "Could not determine config directory".to_string())?;
 
-        let arrangements_dir = config_dir.join("aerospace-arrangements");
+        let stages_dir = config_dir.join("aerospace-stages");
 
-        Arrangement::load_from_dir(arrangements_dir)
-            .with_context(|| format!("Failed to load arrangements from config directory."))
+        Stage::load_from_dir(stages_dir)
+            .with_context(|| format!("Failed to load stages from config directory."))
     }
 }
 
-impl ArrangementWindow {
+impl StageWindow {
     #[cfg(test)]
     pub fn dummy() -> Self {
-        ArrangementWindow {
+        StageWindow {
             app: Some("Test App".into()),
             title: Some("Test Title".into()),
             bundle_id: Some("com.example.test".into()),
@@ -131,10 +130,10 @@ impl ArrangementWindow {
     }
 }
 
-impl ArrangementWorkspace {
+impl StageWorkspace {
     #[cfg(test)]
     pub fn dummy() -> Self {
-        ArrangementWorkspace {
+        StageWorkspace {
             name: "1".into(),
             windows: Vec::new(),
         }

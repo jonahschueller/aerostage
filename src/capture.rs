@@ -1,36 +1,36 @@
 use crate::aerospace::Aerospace;
-use crate::arrangement::{Arrangement, ArrangementWindow, ArrangementWorkspace};
+use crate::stage::{Stage, StageWindow, StageWorkspace};
 
-pub fn capture_arrangement(aerospace: &Aerospace, name: &str) -> Result<Arrangement, String> {
+pub fn capture_stage(aerospace: &Aerospace, name: &str) -> Result<Stage, String> {
     let workspaces = aerospace.list_workspaces().unwrap();
     let windows = aerospace.list_windows().unwrap();
 
-    let workspaces: Vec<ArrangementWorkspace> = workspaces
+    let workspaces: Vec<StageWorkspace> = workspaces
         .iter()
         .map(|workspace| {
             let name = workspace.workspace.to_string();
             let windows_of_workspace = windows
                 .iter()
                 .filter(|window| window.workspace == workspace.workspace)
-                .map(|window| ArrangementWindow {
+                .map(|window| StageWindow {
                     app: Some(window.app_name.clone()),
                     title: Some(window.window_title.clone()),
                     bundle_id: Some(window.app_bundle_id.clone()),
                 })
                 .collect();
 
-            ArrangementWorkspace {
+            StageWorkspace {
                 name,
                 windows: windows_of_workspace,
             }
         })
         .collect();
 
-    let arrangement = Arrangement {
+    let stage = Stage {
         name: name.to_string(),
         description: None,
         workspaces: workspaces,
     };
 
-    Ok(arrangement)
+    Ok(stage)
 }

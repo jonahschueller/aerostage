@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::{
     aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
-    arrangement::Arrangement,
     restore::{resolution::WindowResolution, restore::RestoreAction::MoveToWorkspace},
+    stage::Stage,
 };
 
 #[derive(Debug)]
@@ -80,17 +80,15 @@ impl RestorePlan {
 
     fn restore(&self, aerospace: &Aerospace) {
         for action in &self.plan {
-            action
-                .execute(aerospace)
-                .expect("Failed to restore arrangement.")
+            action.execute(aerospace).expect("Failed to restore stage.")
         }
     }
 }
 
-pub fn restore_arrangement(aerospace: &Aerospace, arrangement: &Arrangement) -> Result<()> {
+pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
     let live_windows = aerospace.list_windows()?;
 
-    let resolution = WindowResolution::resolve(arrangement, &live_windows);
+    let resolution = WindowResolution::resolve(stage, &live_windows);
 
     let restore_plan = RestorePlan::resolve(&resolution, &live_windows)?;
 
@@ -104,5 +102,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_restore_arrangement_successfully() {}
+    fn test_restore_stage_successfully() {}
 }

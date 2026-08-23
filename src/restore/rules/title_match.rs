@@ -85,19 +85,19 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arrangement::{ArrangementWindow, ArrangementWorkspace};
+    use crate::stage::{StageWindow, StageWorkspace};
 
     fn create_target(
         app_name: &str,
         bundle_id: &str,
         title: Option<&str>,
         workspace_name: &str,
-    ) -> (ArrangementWindow, ArrangementWorkspace) {
-        let window = ArrangementWindow::dummy()
+    ) -> (StageWindow, StageWorkspace) {
+        let window = StageWindow::dummy()
             .with_app(app_name)
             .with_bundle_id(bundle_id)
             .with_title(title);
-        let workspace = ArrangementWorkspace::dummy().with_name(workspace_name);
+        let workspace = StageWorkspace::dummy().with_name(workspace_name);
         (window, workspace)
     }
 

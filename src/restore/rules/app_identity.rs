@@ -61,18 +61,18 @@ impl WindowResolverRule for UniqueAppNameResolverRule {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arrangement::{ArrangementWindow, ArrangementWorkspace};
+    use crate::stage::{StageWindow, StageWorkspace};
 
     // Helper to construct a standard ResolveTarget quickly
     fn create_target(
         app_name: &str,
         bundle_id: &str,
         workspace_name: &str,
-    ) -> (ArrangementWindow, ArrangementWorkspace) {
-        let window = ArrangementWindow::dummy()
+    ) -> (StageWindow, StageWorkspace) {
+        let window = StageWindow::dummy()
             .with_app(app_name)
             .with_bundle_id(bundle_id);
-        let workspace = ArrangementWorkspace::dummy().with_name(workspace_name);
+        let workspace = StageWorkspace::dummy().with_name(workspace_name);
         (window, workspace)
     }
 

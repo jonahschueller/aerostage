@@ -1,11 +1,11 @@
 use crate::{
     aerospace::{AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
-    arrangement::{ArrangementWindow, ArrangementWorkspace},
+    stage::{StageWindow, StageWorkspace},
 };
 
 pub struct ResolveTarget<'a> {
-    pub target_workspace: &'a ArrangementWorkspace,
-    pub target_window: &'a ArrangementWindow,
+    pub target_workspace: &'a StageWorkspace,
+    pub target_window: &'a StageWindow,
 }
 
 impl<'a> ResolveTarget<'a> {

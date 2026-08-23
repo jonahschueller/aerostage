@@ -3,15 +3,15 @@ use clap::{Parser, Subcommand};
 
 use crate::{
     aerospace::Aerospace,
-    arrangement::Arrangement,
-    capture::capture_arrangement,
+    capture::capture_stage,
     cli::Commands::{Capture, Restore},
     config::Config,
-    restore::restore_arrangement,
+    restore::restore_stage,
+    stage::Stage,
 };
 
 #[derive(Parser)]
-#[command(name = "aerospace-arrangement")]
+#[command(name = "aerostage")]
 #[command(about = "Captures and restores aerospace workspace states", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
@@ -26,7 +26,7 @@ pub enum Commands {
     },
     Restore {
         #[arg(short, long)]
-        arrangement: String,
+        stage: String,
     },
 }
 
@@ -34,30 +34,29 @@ fn execute_capture(output: String) {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
-    let arrangement =
-        capture_arrangement(&aerospace, &output).expect("Failed to capture arrangement");
+    let stage = capture_stage(&aerospace, &output).expect("Failed to capture stage");
 
-    arrangement
+    stage
         .save_to_file(output.clone())
-        .expect("Failed to capture arrangement.")
+        .expect("Failed to capture stage.")
 }
 
-fn execute_restore(arrangement_name: String, config: &Config) {
+fn execute_restore(stage_name: String, config: &Config) {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
-    let arrangement_path = config.arrangement_directory.join(&arrangement_name);
+    let stage_path = config.stage_directory.join(&stage_name);
 
-    let arrangement = match Arrangement::load_from_file(&arrangement_path) {
+    let stage = match Stage::load_from_file(&stage_path) {
         Ok(a) => a,
         Err(err) => {
-            eprintln!("Error loading arrangement '{arrangement_name}': {err}");
+            eprintln!("Error loading stage '{stage_name}': {err}");
             return;
         }
     };
 
-    if let Err(err) = restore_arrangement(&aerospace, &arrangement) {
-        eprintln!("Failed to restore arrangement '{arrangement_name}': {err}");
+    if let Err(err) = restore_stage(&aerospace, &stage) {
+        eprintln!("Failed to restore stage '{stage_name}': {err}");
     }
 }
 
@@ -66,8 +65,8 @@ pub fn execute_command(command: Commands, config: &Config) {
         Capture { output } => {
             execute_capture(output);
         }
-        Restore { arrangement } => {
-            execute_restore(arrangement, config);
+        Restore { stage } => {
+            execute_restore(stage, config);
         }
     }
 }
