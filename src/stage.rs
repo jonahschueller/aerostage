@@ -38,7 +38,12 @@ impl Stage {
         let toml_stage = toml::to_string_pretty(&self)
             .with_context(|| "Failed to convert stage to toml format.")?;
 
-        fs::write(path, toml_stage).with_context(|| "Failed to write stage to file.")?;
+        fs::write(&path, toml_stage).with_context(|| {
+            format!(
+                "Failed to write stage to file '{}'.",
+                path.as_ref().display()
+            )
+        })?;
 
         Ok(())
     }

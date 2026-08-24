@@ -23,14 +23,21 @@ pub enum Commands {
     Restore { stage: String },
 }
 
-fn execute_capture(output: String) {
+fn execute_capture(output: String, config: &Config) {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
-    let stage = capture_stage(&aerospace, &output).expect("Failed to capture stage");
+    let stage_filepath = config.stage_directory.join(&output);
+
+    let stage_name: String = stage_filepath
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| stage_filepath.display().to_string());
+
+    let stage = capture_stage(&aerospace, &stage_name).expect("Failed to capture stage");
 
     stage
-        .save_to_file(output.clone())
+        .save_to_file(&stage_filepath)
         .expect("Failed to capture stage.")
 }
 
@@ -56,10 +63,10 @@ fn execute_restore(stage_name: String, config: &Config) {
 pub fn execute_command(command: Commands, config: &Config) {
     match command {
         Capture { output } => {
-            execute_capture(output);
+            execute_capture(output, &config);
         }
         Restore { stage } => {
-            execute_restore(stage, config);
+            execute_restore(stage, &config);
         }
     }
 }
