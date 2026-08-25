@@ -29,10 +29,7 @@ pub struct StageWorkspace {
 pub struct StageWindow {
     pub app: Option<String>,
     pub title: Option<String>,
-    pub bundle_id: Option<String>, // #[serde(rename = "launch-if-missing", default)]
-                                   // pub launch_if_missing: bool,
-                                   // #[serde(default)]
-                                   // pub float: bool,
+    pub bundle_id: Option<String>,
 }
 
 impl Stage {
@@ -48,6 +45,7 @@ impl Stage {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         self.write(Box::new(File::create(&path)?))
     }
@@ -64,6 +62,7 @@ impl Stage {
         Ok(stage)
     }
 
+    #[allow(dead_code)]
     pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Stage>> {
         let dir = dir.as_ref();
 
@@ -99,6 +98,7 @@ impl Stage {
         Ok(stages)
     }
 
+    #[allow(dead_code)]
     pub fn load_from_config() -> Result<Vec<Stage>> {
         let config_dir = dirs::config_dir()
             .with_context(|| "Could not determine config directory".to_string())?;

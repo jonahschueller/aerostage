@@ -10,10 +10,13 @@ pub type AerospaceWorkspaceId = String;
 
 #[derive(Debug, Deserialize)]
 pub struct AerospaceApp {
+    #[allow(dead_code)]
     #[serde(rename = "app-bundle-id")]
     pub app_bundle_id: String,
+    #[allow(dead_code)]
     #[serde(rename = "app-name")]
     pub app_name: String,
+    #[allow(dead_code)]
     #[serde(rename = "app-pid")]
     pub app_pid: u32,
 }
@@ -25,8 +28,10 @@ pub struct AerospaceWorkspace {
 
 #[derive(Debug, Deserialize)]
 pub struct AerospaceMonitor {
+    #[allow(dead_code)]
     #[serde(rename = "monitor-id")]
     pub monitor_id: i32,
+    #[allow(dead_code)]
     #[serde(rename = "monitor-name")]
     pub monitor_name: String,
 }

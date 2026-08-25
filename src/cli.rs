@@ -29,8 +29,8 @@ pub enum Commands {
 impl Display for Commands {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Capture => f.write_str("capture"),
-            Restore => f.write_str("restore"),
+            Self::Capture { output: _ } => f.write_str("capture"),
+            Self::Restore { stage: _ } => f.write_str("restore"),
         }
     }
 }
