@@ -24,6 +24,7 @@ pub fn capture_stage(aerospace: &Aerospace, name: &str) -> Result<Stage, String>
                 windows: windows_of_workspace,
             }
         })
+        .filter(|workspace| !workspace.windows.is_empty())
         .collect();
 
     let stage = Stage {
