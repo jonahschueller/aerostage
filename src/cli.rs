@@ -1,6 +1,6 @@
-use std::{fs::File, io::Write};
+use std::{fmt::Display, fs::File, io::Write};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 use clap::{Parser, Subcommand};
 
 use crate::{
@@ -26,6 +26,15 @@ pub enum Commands {
     Restore { stage: String },
 }
 
+impl Display for Commands {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Capture => f.write_str("capture"),
+            Restore => f.write_str("restore"),
+        }
+    }
+}
+
 fn execute_capture(output: Option<&str>, config: &Config) -> Result<()> {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
@@ -46,32 +55,28 @@ fn execute_capture(output: Option<&str>, config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn execute_restore(stage_name: String, config: &Config) {
+fn execute_restore(stage_name: String, config: &Config) -> Result<()> {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
     let stage_path = config.stage_directory.join(&stage_name);
 
-    let stage = match Stage::load_from_file(&stage_path) {
-        Ok(a) => a,
-        Err(err) => {
-            eprintln!("Error loading stage '{stage_name}': {err}");
-            return;
-        }
-    };
+    let stage =
+        Stage::load_from_file(&stage_path).with_context(|| "Failed to load stage from file.")?;
 
-    if let Err(err) = restore_stage(&aerospace, &stage) {
-        eprintln!("Failed to restore stage '{stage_name}': {err}");
-    }
+    restore_stage(&aerospace, &stage)
+        .with_context(|| format!("Failed to restore stage '{}'", stage_name))?;
+
+    Ok(())
 }
 
 pub fn execute_command(command: Commands, config: &Config) {
-    match command {
-        Capture { output } => {
-            execute_capture(output.as_deref(), &config);
-        }
-        Restore { stage } => {
-            execute_restore(stage, &config);
-        }
+    let result = match &command {
+        Capture { output } => execute_capture(output.as_deref(), &config),
+        Restore { stage } => execute_restore(stage.clone(), &config),
+    };
+
+    if let Err(err) = result {
+        eprintln!("Failed to execute command: '{}': {err}", command);
     }
 }
