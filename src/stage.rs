@@ -1,12 +1,14 @@
 use anyhow::{Context, Ok, Result, ensure};
-use std::fs;
+use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
+use std::{fs, io::Write};
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Stage {
-    pub name: String,
+    pub name: Option<String>,
     pub description: Option<String>,
     #[serde(rename = "workspace")]
     pub workspaces: Vec<StageWorkspace>,
@@ -34,18 +36,20 @@ pub struct StageWindow {
 }
 
 impl Stage {
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub fn write(&self, writer: Box<dyn Write>) -> Result<()> {
         let toml_stage = toml::to_string_pretty(&self)
             .with_context(|| "Failed to convert stage to toml format.")?;
 
-        fs::write(&path, toml_stage).with_context(|| {
-            format!(
-                "Failed to write stage to file '{}'.",
-                path.as_ref().display()
-            )
-        })?;
+        let mut buffered = BufWriter::new(writer);
+
+        writeln!(buffered, "{}", toml_stage)
+            .with_context(|| "Failed to write context to output.")?;
 
         Ok(())
+    }
+
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        self.write(Box::new(File::create(&path)?))
     }
 
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Stage> {

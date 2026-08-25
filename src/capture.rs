@@ -1,7 +1,7 @@
 use crate::aerospace::Aerospace;
 use crate::stage::{Stage, StageWindow, StageWorkspace};
 
-pub fn capture_stage(aerospace: &Aerospace, name: &str) -> Result<Stage, String> {
+pub fn capture_stage(aerospace: &Aerospace, name: Option<&str>) -> Result<Stage, String> {
     let workspaces = aerospace.list_workspaces().unwrap();
     let windows = aerospace.list_windows().unwrap();
 
@@ -28,7 +28,7 @@ pub fn capture_stage(aerospace: &Aerospace, name: &str) -> Result<Stage, String>
         .collect();
 
     let stage = Stage {
-        name: name.to_string(),
+        name: name.map(|n| n.to_string()),
         description: None,
         workspaces: workspaces,
     };

@@ -1,3 +1,6 @@
+use std::{fs::File, io::Write};
+
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use crate::{
@@ -19,26 +22,28 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    Capture { output: String },
+    Capture { output: Option<String> },
     Restore { stage: String },
 }
 
-fn execute_capture(output: String, config: &Config) {
+fn execute_capture(output: Option<&str>, config: &Config) -> Result<()> {
     Aerospace::ensure_aerospace_installed();
     let aerospace = Aerospace::default();
 
-    let stage_filepath = config.stage_directory.join(&output);
+    let stage_filepath = output.map(|out| config.stage_directory.join(&out));
 
-    let stage_name: String = stage_filepath
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| stage_filepath.display().to_string());
+    let stage = capture_stage(&aerospace, output).expect("Failed to capture stage");
 
-    let stage = capture_stage(&aerospace, &stage_name).expect("Failed to capture stage");
+    let writer: Box<dyn Write> = match &stage_filepath {
+        Some(file_path) => Box::new(File::create(file_path)?),
+        None => Box::new(std::io::stdout().lock()),
+    };
 
     stage
-        .save_to_file(&stage_filepath)
-        .expect("Failed to capture stage.")
+        .write(writer)
+        .with_context(|| "Failed to capture stage.")?;
+
+    Ok(())
 }
 
 fn execute_restore(stage_name: String, config: &Config) {
@@ -63,7 +68,7 @@ fn execute_restore(stage_name: String, config: &Config) {
 pub fn execute_command(command: Commands, config: &Config) {
     match command {
         Capture { output } => {
-            execute_capture(output, &config);
+            execute_capture(output.as_deref(), &config);
         }
         Restore { stage } => {
             execute_restore(stage, &config);
