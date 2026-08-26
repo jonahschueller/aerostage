@@ -69,7 +69,7 @@ impl RestorePlan {
                     .find(|live| live.window_id == window.window_id)
             })
             .for_each(|window| {
-                println!(
+                eprintln!(
                     "Could not restore window {} | {} | {}",
                     window.window_title, window.app_name, window.app_bundle_id
                 )

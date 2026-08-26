@@ -12,6 +12,7 @@ pub struct Stage {
     pub description: Option<String>,
     #[serde(rename = "workspace")]
     pub workspaces: Vec<StageWorkspace>,
+    pub default_workspace: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

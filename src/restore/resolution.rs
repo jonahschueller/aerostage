@@ -16,10 +16,10 @@ struct WindowResolver {
     rules: Vec<Box<dyn WindowResolverRule>>,
 }
 
-impl Default for WindowResolver {
-    fn default() -> Self {
+impl WindowResolver {
+    fn new(fallback_workspace: Option<String>) -> Self {
         WindowResolver {
-            fallback_workspace: Some("Z".to_string()),
+            fallback_workspace: fallback_workspace,
             rules: vec![
                 Box::new(TitleMatchResolverRule {}),
                 Box::new(TitleSimilarityResolverRule { threshold: 0.75 }),
@@ -131,7 +131,7 @@ pub struct WindowResolution {
 
 impl WindowResolution {
     pub fn resolve(stage: &Stage, windows: &[AerospaceWindow]) -> Self {
-        let resolver = WindowResolver::default();
+        let resolver = WindowResolver::new(stage.default_workspace.clone());
 
         let (resolved_window_matches, unresolved_windows) = resolver.resolve(stage, &windows);
 

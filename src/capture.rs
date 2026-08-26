@@ -31,6 +31,7 @@ pub fn capture_stage(aerospace: &Aerospace, name: Option<&str>) -> Result<Stage,
         name: name.map(|n| n.to_string()),
         description: None,
         workspaces: workspaces,
+        default_workspace: None,
     };
 
     Ok(stage)
