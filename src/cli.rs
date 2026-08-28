@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::{
     aerospace::Aerospace,
-    capture::capture_stage,
+    capture::StageCapturer,
     cli::Commands::{Capture, Restore},
     config::Config,
     restore::restore_stage,
@@ -62,12 +62,14 @@ fn execute_capture(capture_args: &CaptureArgs, config: &Config) -> Result<()> {
         .as_ref()
         .map(|ws| ws.split(",").collect::<Vec<_>>());
 
-    let stage = capture_stage(
-        &aerospace,
-        capture_args.output.as_deref(),
-        capture_workspaces.as_deref(),
-    )
-    .context("Failed to capture stage")?;
+    let capturer = StageCapturer::new(&aerospace);
+
+    let stage = capturer
+        .capture(
+            capture_args.output.as_deref(),
+            capture_workspaces.as_deref(),
+        )
+        .context("Failed to capture stage")?;
 
     let writer: Box<dyn Write> = match &stage_filepath {
         Some(file_path) => Box::new(File::create(file_path)?),
