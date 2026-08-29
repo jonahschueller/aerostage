@@ -4,6 +4,11 @@ AeroStage saves AeroSpace window-to-workspace assignments and puts them back lat
 
 It talks to the [AeroSpace](https://github.com/nikitabobko/AeroSpace) CLI. It does not replace AeroSpace.
 
+> [!WARNING]
+> AeroStage is under active development. The CLI, stage format, and matching
+> rules can still change, and there is no migration path yet. Treat this as a
+> beta: useful, but not a stable contract. 
+
 ## Requirements
 
 - [AeroSpace](https://github.com/nikitabobko/AeroSpace) installed, with the `aerospace` binary on your `PATH`
