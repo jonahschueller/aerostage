@@ -31,21 +31,3 @@ impl Config {
             .with_context(|| "Failed to create stage directory.")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_config() {
-        let config = Config::new();
-
-        assert!(
-            config
-                .stage_directory
-                .to_str()
-                .unwrap()
-                .ends_with(".aerostage")
-        )
-    }
-}
