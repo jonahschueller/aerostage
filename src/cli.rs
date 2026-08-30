@@ -26,6 +26,8 @@ pub struct CaptureArgs {
 
     #[arg(long)]
     workspaces: Option<String>,
+    #[arg(long)]
+    default_workspace: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -68,6 +70,7 @@ fn execute_capture(capture_args: &CaptureArgs, config: &Config) -> Result<()> {
         .capture(
             capture_args.output.as_deref(),
             capture_workspaces.as_deref(),
+            capture_args.default_workspace.as_deref(),
         )
         .context("Failed to capture stage")?;
 

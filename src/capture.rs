@@ -35,7 +35,12 @@ impl<'a> StageCapturer<'a> {
         Ok(windows_by_workspace)
     }
 
-    pub fn capture(&self, name: Option<&str>, target_workspaces: Option<&[&str]>) -> Result<Stage> {
+    pub fn capture(
+        &self,
+        name: Option<&str>,
+        target_workspaces: Option<&[&str]>,
+        default_workspace: Option<&str>,
+    ) -> Result<Stage> {
         let aerospace_workspaces = self
             .aerospace
             .list_workspaces()
@@ -66,7 +71,7 @@ impl<'a> StageCapturer<'a> {
             name: name.map(String::from),
             description: None,
             workspaces,
-            default_workspace: None,
+            default_workspace: default_workspace.map(|s| s.to_string()),
         })
     }
 }
