@@ -20,7 +20,7 @@ It talks to the [AeroSpace](https://github.com/nikitabobko/AeroSpace) CLI. It do
 cargo install --path .
 ```
 
-That puts `aerostage` on your path. A release build stores stages in `~/.aerostage` (created on first run).
+That puts `aerostage` on your path. A release build stores stages in `~/.aerostage/stages` (created on first run).
 
 `cargo run` uses a debug build, which writes stages into the current working directory instead.
 
