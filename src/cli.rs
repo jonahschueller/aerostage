@@ -1,4 +1,9 @@
-use std::{fmt::Display, fs::File, io::Write};
+use std::{
+    fmt::Display,
+    fs::{File, OpenOptions},
+    io::Write,
+    path::PathBuf,
+};
 
 use anyhow::{Context, Ok, Result};
 use clap::{Args, Parser, Subcommand};
@@ -16,6 +21,9 @@ use crate::{
 #[command(name = "aerostage")]
 #[command(about = "Captures and restores aerospace workspace states", long_about = None)]
 pub struct Cli {
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -75,7 +83,13 @@ fn execute_capture(capture_args: &CaptureArgs, config: &Config) -> Result<()> {
         .context("Failed to capture stage")?;
 
     let writer: Box<dyn Write> = match &stage_filepath {
-        Some(file_path) => Box::new(File::create(file_path)?),
+        Some(file_path) => {
+            if let Some(parent) = file_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            Box::new(File::create(file_path)?)
+        }
         None => Box::new(std::io::stdout().lock()),
     };
 
