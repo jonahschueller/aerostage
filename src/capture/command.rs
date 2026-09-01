@@ -5,23 +5,9 @@ use anyhow::{Context, Result};
 use crate::{aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler};
 
 pub struct CaptureCommandHandler {
-    output: Option<String>,
-    workspaces: Option<String>,
-    default_workspace: Option<String>,
-}
-
-impl CaptureCommandHandler {
-    pub fn new(
-        output: Option<String>,
-        workspaces: Option<String>,
-        default_workspace: Option<String>,
-    ) -> Self {
-        CaptureCommandHandler {
-            output,
-            workspaces,
-            default_workspace,
-        }
-    }
+    pub output: Option<String>,
+    pub workspaces: Option<String>,
+    pub default_workspace: Option<String>,
 }
 
 impl CommandHandler for CaptureCommandHandler {

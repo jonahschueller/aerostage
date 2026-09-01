@@ -5,13 +5,7 @@ use crate::{
 };
 
 pub struct RestoreCommandHandler {
-    stage: String,
-}
-
-impl RestoreCommandHandler {
-    pub fn new(stage: String) -> Self {
-        RestoreCommandHandler { stage }
-    }
+    pub stage: String,
 }
 
 impl CommandHandler for RestoreCommandHandler {

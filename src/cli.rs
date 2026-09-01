@@ -22,17 +22,33 @@ pub struct Cli {
 
 #[derive(Args, Debug)]
 pub struct CaptureArgs {
-    output: Option<String>,
+    pub output: Option<String>,
 
     #[arg(long)]
-    workspaces: Option<String>,
+    pub workspaces: Option<String>,
     #[arg(long)]
-    default_workspace: Option<String>,
+    pub default_workspace: Option<String>,
 }
 
 #[derive(Args, Debug)]
 pub struct RestoreArgs {
-    stage: String,
+    pub stage: String,
+}
+
+impl From<RestoreArgs> for RestoreCommandHandler {
+    fn from(args: RestoreArgs) -> Self {
+        RestoreCommandHandler { stage: args.stage }
+    }
+}
+
+impl From<CaptureArgs> for CaptureCommandHandler {
+    fn from(args: CaptureArgs) -> Self {
+        CaptureCommandHandler {
+            output: args.output,
+            workspaces: args.workspaces,
+            default_workspace: args.default_workspace,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -44,12 +60,8 @@ pub enum Commands {
 impl Commands {
     fn create_handler(self) -> Box<dyn CommandHandler> {
         match self {
-            Self::Capture(capture_args) => Box::new(CaptureCommandHandler::new(
-                capture_args.output,
-                capture_args.workspaces,
-                capture_args.default_workspace,
-            )),
-            Self::Restore(restore_args) => Box::new(RestoreCommandHandler::new(restore_args.stage)),
+            Self::Capture(capture_args) => Box::new(CaptureCommandHandler::from(capture_args)),
+            Self::Restore(restore_args) => Box::new(RestoreCommandHandler::from(restore_args)),
         }
     }
 }
