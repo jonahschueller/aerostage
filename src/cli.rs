@@ -8,14 +8,11 @@ use std::{
 use anyhow::{Context, Ok, Result};
 use clap::{Args, Parser, Subcommand};
 
-use crate::{
-    aerospace::Aerospace,
-    capture::StageCapturer,
-    cli::Commands::{Capture, Restore},
-    config::Config,
-    restore::restore_stage,
-    stage::Stage,
-};
+use crate::{capture::CaptureCommandHandler, config::Config, restore::RestoreCommandHandler};
+
+pub trait CommandHandler {
+    fn run_command(&self, config: &Config) -> Result<()>;
+}
 
 #[derive(Parser)]
 #[command(name = "aerostage")]
