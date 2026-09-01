@@ -1,7 +1,8 @@
+mod command;
 mod resolution;
 mod restore;
 mod rule;
 mod rules;
 mod types;
 
-pub use restore::restore_stage;
+pub use command::RestoreCommandHandler;
