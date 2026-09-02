@@ -60,21 +60,6 @@ impl RestorePlan {
             })
             .collect();
 
-        resolution
-            .unresolved_windows
-            .iter()
-            .filter_map(|window| {
-                live_windows
-                    .iter()
-                    .find(|live| live.window_id == window.window_id)
-            })
-            .for_each(|window| {
-                eprintln!(
-                    "Could not restore window {} | {} | {}",
-                    window.window_title, window.app_name, window.app_bundle_id
-                )
-            });
-
         Ok(RestorePlan { plan: actions })
     }
 
@@ -91,8 +76,17 @@ pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
     let resolution = WindowResolution::resolve(stage, &live_windows);
 
     let restore_plan = RestorePlan::resolve(&resolution, &live_windows)?;
-
     restore_plan.restore(aerospace);
+
+    resolution.pending_targets.iter().for_each(|target| {
+        let window = target.target_window;
+        eprintln!(
+            "Could not restore window {} | {} | {}",
+            window.title.as_deref().unwrap_or("-"),
+            window.app.as_deref().unwrap_or("-"),
+            window.bundle_id.as_deref().unwrap_or("-"),
+        )
+    });
 
     Ok(())
 }

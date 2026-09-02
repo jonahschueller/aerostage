@@ -90,11 +90,15 @@ impl WindowResolver {
         available_windows.clear();
     }
 
-    fn resolve(
+    fn resolve<'a>(
         &self,
-        stage: &Stage,
+        stage: &'a Stage,
         windows: &[AerospaceWindow],
-    ) -> (Vec<ResolvedWindowMatch>, Vec<UnresolvedWindow>) {
+    ) -> (
+        Vec<ResolvedWindowMatch>,
+        Vec<ResolveTarget<'a>>,
+        Vec<UnresolvedWindow>,
+    ) {
         let mut pending_targets: Vec<ResolveTarget> = stage
             .workspaces
             .iter()
@@ -119,24 +123,30 @@ impl WindowResolver {
                 window_id: window.window_id,
             })
             .collect();
-        (resolved_matches, unresolved_windows)
+
+        (resolved_matches, pending_targets, unresolved_windows)
     }
 }
 
-#[derive(Debug)]
-pub struct WindowResolution {
+pub struct WindowResolution<'a> {
     pub resolved_windows: Vec<ResolvedWindowMatch>,
+    pub pending_targets: Vec<ResolveTarget<'a>>,
+
+    // For now, the unresolved_windows are not used. Kept for completeness
+    #[allow(unused)]
     pub unresolved_windows: Vec<UnresolvedWindow>,
 }
 
-impl WindowResolution {
-    pub fn resolve(stage: &Stage, windows: &[AerospaceWindow]) -> Self {
+impl<'a> WindowResolution<'a> {
+    pub fn resolve(stage: &'a Stage, windows: &[AerospaceWindow]) -> Self {
         let resolver = WindowResolver::new(stage.default_workspace.clone());
 
-        let (resolved_window_matches, unresolved_windows) = resolver.resolve(stage, &windows);
+        let (resolved_window_matches, pending_targets, unresolved_windows) =
+            resolver.resolve(stage, &windows);
 
         WindowResolution {
             resolved_windows: resolved_window_matches,
+            pending_targets: pending_targets,
             unresolved_windows: unresolved_windows,
         }
     }
