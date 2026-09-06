@@ -107,7 +107,7 @@ impl Stage {
         let stages_dir = config_dir.join("aerospace-stages");
 
         Stage::load_from_dir(stages_dir)
-            .with_context(|| format!("Failed to load stages from config directory."))
+            .with_context(|| "Failed to load stages from config directory.".to_string())
     }
 }
 

@@ -18,7 +18,7 @@ impl CommandHandler for CaptureCommandHandler {
         let stage_filepath = self
             .output
             .as_deref()
-            .map(|out| config.stage_directory.join(&out));
+            .map(|out| config.stage_directory.join(out));
 
         let capture_workspaces = self
             .workspaces

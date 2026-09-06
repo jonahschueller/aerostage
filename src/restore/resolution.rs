@@ -10,7 +10,7 @@ use crate::{
     },
     stage::Stage,
 };
-use std::vec;
+
 struct WindowResolver {
     fallback_workspace: Option<AerospaceWorkspaceId>,
     rules: Vec<Box<dyn WindowResolverRule>>,
@@ -19,7 +19,7 @@ struct WindowResolver {
 impl WindowResolver {
     fn new(fallback_workspace: Option<String>) -> Self {
         WindowResolver {
-            fallback_workspace: fallback_workspace,
+            fallback_workspace,
             rules: vec![
                 Box::new(TitleMatchResolverRule {}),
                 Box::new(TitleSimilarityResolverRule { threshold: 0.75 }),
@@ -29,9 +29,7 @@ impl WindowResolver {
             ],
         }
     }
-}
 
-impl WindowResolver {
     fn apply_resolver_rules(
         &self,
         pending_targets: &mut Vec<ResolveTarget>,
@@ -74,7 +72,7 @@ impl WindowResolver {
         resolved_matches: &mut Vec<ResolvedWindowMatch>,
         available_windows: &mut Vec<AerospaceWindow>,
     ) {
-        let Some(fallback_workspace) = self.fallback_workspace.clone() else {
+        let Some(fallback_workspace) = self.fallback_workspace.as_ref() else {
             return;
         };
 
@@ -104,8 +102,8 @@ impl WindowResolver {
             .iter()
             .flat_map(|workspace| {
                 workspace.windows.iter().map(move |window| ResolveTarget {
-                    target_workspace: &workspace,
-                    target_window: &window,
+                    target_workspace: workspace,
+                    target_window: window,
                 })
             })
             .collect();
@@ -141,13 +139,13 @@ impl<'a> WindowResolution<'a> {
     pub fn resolve(stage: &'a Stage, windows: &[AerospaceWindow]) -> Self {
         let resolver = WindowResolver::new(stage.default_workspace.clone());
 
-        let (resolved_window_matches, pending_targets, unresolved_windows) =
-            resolver.resolve(stage, &windows);
+        let (resolved_windows, pending_targets, unresolved_windows) =
+            resolver.resolve(stage, windows);
 
         WindowResolution {
-            resolved_windows: resolved_window_matches,
-            pending_targets: pending_targets,
-            unresolved_windows: unresolved_windows,
+            resolved_windows,
+            pending_targets,
+            unresolved_windows,
         }
     }
 }

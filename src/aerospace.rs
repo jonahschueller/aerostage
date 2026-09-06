@@ -159,7 +159,7 @@ impl<E: CommandExecutor> Aerospace<E> {
     }
 
     fn execute_aerospace(&self, command: &AerospaceCommand, args: &[&str]) -> Result<String> {
-        self.executor.execute(&format!("{}", command), &args)
+        self.executor.execute(&format!("{}", command), args)
     }
 
     fn query_aerospace<T>(&self, command: &AerospaceCommand, args: &[&str]) -> Result<T>

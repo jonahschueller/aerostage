@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
-    restore::{resolution::WindowResolution, restore::RestoreAction::MoveToWorkspace},
+    restore::resolution::WindowResolution,
     stage::Stage,
 };
 
@@ -19,10 +19,10 @@ enum RestoreAction {
 impl RestoreAction {
     fn execute(&self, aerospace: &Aerospace) -> Result<()> {
         match self {
-            MoveToWorkspace {
+            Self::MoveToWorkspace {
                 workspace,
                 target_window,
-            } => aerospace.move_node_to_workspace(workspace, target_window.clone()),
+            } => aerospace.move_node_to_workspace(workspace, *target_window),
         }
     }
 }
@@ -52,7 +52,7 @@ impl RestorePlan {
                 if *current_workspace != &mapping.target_workspace {
                     Some(RestoreAction::MoveToWorkspace {
                         workspace: mapping.target_workspace.clone(),
-                        target_window: mapping.window_id.clone(),
+                        target_window: mapping.window_id,
                     })
                 } else {
                     None
@@ -78,7 +78,7 @@ pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
     let restore_plan = RestorePlan::resolve(&resolution, &live_windows)?;
     restore_plan.restore(aerospace);
 
-    resolution.pending_targets.iter().for_each(|target| {
+    for target in resolution.pending_targets {
         let window = target.target_window;
         eprintln!(
             "Could not restore window {} | {} | {}",
@@ -86,7 +86,7 @@ pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
             window.app.as_deref().unwrap_or("-"),
             window.bundle_id.as_deref().unwrap_or("-"),
         )
-    });
+    }
 
     Ok(())
 }

@@ -28,7 +28,7 @@ impl WindowResolverRule for TitleMatchResolverRule {
                 target_title.to_lowercase() == window.window_title.to_lowercase()
                     || title_regex
                         .as_ref()
-                        .map_or(false, |re| re.is_match(&window.window_title))
+                        .is_some_and(|re| re.is_match(&window.window_title))
             });
 
         match (matches.next(), matches.next()) {
@@ -51,7 +51,7 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
         windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
-        let target_title = target.target_window.title.clone()?;
+        let target_title = target.target_window.title.as_ref()?;
 
         let app_window_candidates = windows
             .iter()
@@ -66,7 +66,7 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
                     &window.window_title.to_lowercase(),
                 );
 
-                return (window, score);
+                (window, score)
             })
             .filter(|(_, score)| *score >= self.threshold)
             .collect();
@@ -75,10 +75,10 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
 
         let first_match = ranked_matches.first()?;
 
-        return Some(ResolvedWindowMatch {
+        Some(ResolvedWindowMatch {
             target_workspace: target.target_workspace.name.clone(),
             window_id: first_match.0.window_id,
-        });
+        })
     }
 }
 

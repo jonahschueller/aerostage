@@ -19,7 +19,7 @@ impl WindowResolverRule for UniqueBundleIdResolverRule {
                 .target_window
                 .bundle_id
                 .as_deref()
-                .map_or(false, |bundle_id| window.app_bundle_id == bundle_id)
+                .is_some_and(|bundle_id| window.app_bundle_id == bundle_id)
         });
 
         match (bundle_id_matches.next(), bundle_id_matches.next()) {
@@ -45,7 +45,7 @@ impl WindowResolverRule for UniqueAppNameResolverRule {
                 .target_window
                 .app
                 .as_deref()
-                .map_or(false, |app| window.app_name == app)
+                .is_some_and(|app| window.app_name == app)
         });
 
         match (matches.next(), matches.next()) {
