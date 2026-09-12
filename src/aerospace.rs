@@ -1,8 +1,12 @@
 use serde::Deserialize;
 use serde::de::{DeserializeOwned, Deserializer};
+use std::fmt::write;
+use std::fs::TryLockError::Error;
 use std::{fmt::Display, process::Command};
 
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
+
+use crate::aerospace::AerospaceLayout::VTiles;
 
 pub type AerospaceWindowId = u32;
 pub type AerospaceWorkspaceId = String;
@@ -39,6 +43,19 @@ pub enum AerospaceLayout {
     VTiles,
     HAccordion,
     VAccordion,
+}
+
+impl Display for AerospaceLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            AerospaceLayout::HTiles => "h_tiles",
+            AerospaceLayout::VTiles => "v_tiles",
+            AerospaceLayout::HAccordion => "h_accordion",
+            AerospaceLayout::VAccordion => "v_accordion",
+        };
+
+        write!(f, "{}", str)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +150,7 @@ enum AerospaceCommand {
     ListMonitors,
     ListWindows,
     MoveNodeToWorkspace,
+    ChangeLayout,
 }
 
 impl Display for AerospaceCommand {
@@ -143,6 +161,7 @@ impl Display for AerospaceCommand {
             AerospaceCommand::ListMonitors => "list-monitors",
             AerospaceCommand::ListWindows => "list-windows",
             AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
+            AerospaceCommand::ChangeLayout => "layout",
         };
         write!(f, "{s}")
     }
@@ -270,6 +289,22 @@ impl<E: CommandExecutor> Aerospace<E> {
             &["--window-id", &win_id_arg, "--", workspace],
         )
         .with_context(|| "Failed to execute move_node_to_workspace.")?;
+
+        Ok(())
+    }
+
+    pub fn change_layout(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        layout: &AerospaceLayout,
+    ) -> Result<()> {
+        let layout_str = layout.to_string();
+
+        self.execute_aerospace(
+            &AerospaceCommand::ChangeLayout,
+            &["--workspace", workspace, &layout_str],
+        )
+        .with_context(|| "Failed to execute 'layout'.")?;
 
         Ok(())
     }
