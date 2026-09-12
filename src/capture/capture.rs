@@ -63,6 +63,7 @@ impl<'a> StageCapturer<'a> {
                 Some(StageWorkspace {
                     name: ws.workspace,
                     windows,
+                    layout: None,
                 })
             })
             .collect();
