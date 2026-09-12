@@ -32,9 +32,20 @@ pub struct AerospaceApp {
     pub app_pid: u32,
 }
 
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AerospaceLayout {
+    HTiles,
+    VTiles,
+    HAccordion,
+    VAccordion,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AerospaceWorkspace {
     pub workspace: AerospaceWorkspaceId,
+    #[serde(rename = "workspace-root-container-layout")]
+    pub layout: AerospaceLayout,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,7 +223,8 @@ impl<E: CommandExecutor> Aerospace<E> {
     }
 
     pub fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
-        let fields = self.aerospace_output_format(&["workspace"]);
+        let fields =
+            self.aerospace_output_format(&["workspace", "workspace-root-container-layout"]);
         self.query_aerospace(
             &AerospaceCommand::ListWorkspaces,
             &["--all", "--format", &fields],

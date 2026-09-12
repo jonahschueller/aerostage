@@ -2,8 +2,19 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result};
 
-use crate::aerospace::Aerospace;
-use crate::stage::{Stage, StageWindow, StageWorkspace};
+use crate::aerospace::{Aerospace, AerospaceLayout};
+use crate::stage::{Stage, StageWindow, StageWorkspace, StageWorkspaceLayout};
+
+impl Into<StageWorkspaceLayout> for AerospaceLayout {
+    fn into(self) -> StageWorkspaceLayout {
+        match self {
+            AerospaceLayout::HTiles => StageWorkspaceLayout::HTiles,
+            AerospaceLayout::VTiles => StageWorkspaceLayout::VTiles,
+            AerospaceLayout::HAccordion => StageWorkspaceLayout::HAccordion,
+            AerospaceLayout::VAccordion => StageWorkspaceLayout::VAccordion,
+        }
+    }
+}
 
 pub struct StageCapturer<'a> {
     pub aerospace: &'a Aerospace,
@@ -63,7 +74,7 @@ impl<'a> StageCapturer<'a> {
                 Some(StageWorkspace {
                     name: ws.workspace,
                     windows,
-                    layout: None,
+                    layout: Some(ws.layout.into()),
                 })
             })
             .collect();
