@@ -10,7 +10,7 @@ pub struct RestoreCommandHandler {
 
 impl CommandHandler for RestoreCommandHandler {
     fn run_command(&self, config: &crate::config::Config) -> Result<()> {
-        Aerospace::ensure_aerospace_installed();
+        Aerospace::ensure_aerospace_installed()?;
         let aerospace = Aerospace::default();
 
         let stage_path = config.stage_directory.join(&self.stage);

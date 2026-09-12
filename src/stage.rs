@@ -1,4 +1,4 @@
-use anyhow::{Context, Ok, Result, ensure};
+use anyhow::{Context, Result, ensure};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct Stage {
     pub name: Option<String>,
     pub description: Option<String>,
-    #[serde(rename = "workspace")]
+    #[serde(rename = "workspace", default)]
     pub workspaces: Vec<StageWorkspace>,
     pub default_workspace: Option<String>,
 }
@@ -18,11 +18,7 @@ pub struct Stage {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StageWorkspace {
     pub name: String,
-    // pub layout: String,
-    // pub monitor: Vec<String>,
-    // #[serde(default)]
-    // pub focus: bool,
-    #[serde(rename = "window")]
+    #[serde(rename = "window", default)]
     pub windows: Vec<StageWindow>,
 }
 
@@ -67,10 +63,7 @@ impl Stage {
     pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Stage>> {
         let dir = dir.as_ref();
 
-        ensure!(
-            !dir.is_dir(),
-            format!("'{}' is not a directory", dir.display())
-        );
+        ensure!(dir.is_dir(), "'{}' is not a directory", dir.display());
 
         let entries = fs::read_dir(dir)
             .with_context(|| format!("Failed to read directory '{}'", dir.display()))?;
@@ -92,8 +85,9 @@ impl Stage {
         }
 
         ensure!(
-            stages.is_empty(),
-            format!("No stages found in directory '{}'", dir.display())
+            !stages.is_empty(),
+            "No stages found in directory '{}'",
+            dir.display()
         );
 
         Ok(stages)
@@ -101,13 +95,11 @@ impl Stage {
 
     #[allow(dead_code)]
     pub fn load_from_config() -> Result<Vec<Stage>> {
-        let config_dir = dirs::config_dir()
-            .with_context(|| "Could not determine config directory".to_string())?;
+        let config = crate::config::Config::load(None)
+            .with_context(|| "Failed to load aerostage config.")?;
 
-        let stages_dir = config_dir.join("aerospace-stages");
-
-        Stage::load_from_dir(stages_dir)
-            .with_context(|| "Failed to load stages from config directory.".to_string())
+        Stage::load_from_dir(&config.stage_directory)
+            .with_context(|| "Failed to load stages from stage directory.")
     }
 }
 
@@ -153,5 +145,68 @@ impl StageWorkspace {
     pub fn with_name(mut self, name: &str) -> Self {
         self.name = name.to_string();
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("aerostage-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn parses_workspace_without_windows() {
+        let stage: Stage = toml::from_str(
+            r#"
+name = "empty"
+
+[[workspace]]
+name = "1"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(stage.workspaces.len(), 1);
+        assert!(stage.workspaces[0].windows.is_empty());
+    }
+
+    #[test]
+    fn load_from_dir_reads_toml_stages() {
+        let dir = temp_dir("load-from-dir");
+        fs::write(
+            dir.join("work.toml"),
+            r#"
+name = "work"
+
+[[workspace]]
+name = "1"
+"#,
+        )
+        .unwrap();
+
+        let stages = Stage::load_from_dir(&dir).unwrap();
+        assert_eq!(stages.len(), 1);
+        assert_eq!(stages[0].name.as_deref(), Some("work"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_from_dir_rejects_files() {
+        let dir = temp_dir("not-a-dir");
+        let file = dir.join("stage.toml");
+        fs::write(&file, "name = \"x\"\n").unwrap();
+
+        let error = Stage::load_from_dir(&file).unwrap_err();
+        assert!(error.to_string().contains("is not a directory"));
+
+        let _ = fs::remove_dir_all(dir);
     }
 }

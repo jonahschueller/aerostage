@@ -22,5 +22,8 @@ fn main() {
         }
     };
 
-    cli::execute_command(cli.command, &config);
+    if let Err(err) = cli::execute_command(cli.command, &config) {
+        eprintln!("Failed to execute command: {}", err);
+        exit(1);
+    }
 }

@@ -1,20 +1,31 @@
-use serde::de::DeserializeOwned;
-use std::{fmt::Display, process::Command};
-
 use serde::Deserialize;
+use serde::de::{DeserializeOwned, Deserializer};
+use std::{fmt::Display, process::Command};
 
 use anyhow::{Context, Result, anyhow, ensure};
 
 pub type AerospaceWindowId = u32;
 pub type AerospaceWorkspaceId = String;
 
+fn null_to_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::deserialize(deserializer)?.unwrap_or_default())
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AerospaceApp {
     #[allow(dead_code)]
-    #[serde(rename = "app-bundle-id")]
+    #[serde(
+        rename = "app-bundle-id",
+        default,
+        deserialize_with = "null_to_default"
+    )]
     pub app_bundle_id: String,
     #[allow(dead_code)]
-    #[serde(rename = "app-name")]
+    #[serde(rename = "app-name", default, deserialize_with = "null_to_default")]
     pub app_name: String,
     #[allow(dead_code)]
     #[serde(rename = "app-pid")]
@@ -32,7 +43,7 @@ pub struct AerospaceMonitor {
     #[serde(rename = "monitor-id")]
     pub monitor_id: i32,
     #[allow(dead_code)]
-    #[serde(rename = "monitor-name")]
+    #[serde(rename = "monitor-name", default, deserialize_with = "null_to_default")]
     pub monitor_name: String,
 }
 
@@ -40,13 +51,17 @@ pub struct AerospaceMonitor {
 pub struct AerospaceWindow {
     #[serde(rename = "window-id")]
     pub window_id: AerospaceWindowId,
-    #[serde(rename = "window-title")]
+    #[serde(rename = "window-title", default, deserialize_with = "null_to_default")]
     pub window_title: String,
-    #[serde(rename = "app-name")]
+    #[serde(rename = "app-name", default, deserialize_with = "null_to_default")]
     pub app_name: String,
-    #[serde(rename = "app-bundle-id")]
+    #[serde(
+        rename = "app-bundle-id",
+        default,
+        deserialize_with = "null_to_default"
+    )]
     pub app_bundle_id: String,
-    #[serde(rename = "workspace")]
+    #[serde(rename = "workspace", default, deserialize_with = "null_to_default")]
     pub workspace: AerospaceWorkspaceId,
 }
 
@@ -135,10 +150,12 @@ impl Default for Aerospace {
 }
 
 impl Aerospace {
-    pub fn ensure_aerospace_installed() {
-        if which::which("aerospace").is_err() {
-            panic!("Error: 'aerospace' command not found. Please install Aerospace CLI tool.");
-        }
+    pub fn ensure_aerospace_installed() -> Result<()> {
+        which::which("aerospace").map(|_| ()).map_err(|_| {
+            anyhow!(
+                "'aerospace' command not found. Please install AeroSpace and put it on your PATH."
+            )
+        })
     }
 }
 
@@ -238,7 +255,7 @@ impl<E: CommandExecutor> Aerospace<E> {
 
         self.execute_aerospace(
             &AerospaceCommand::MoveNodeToWorkspace,
-            &["--window-id", &win_id_arg, workspace],
+            &["--window-id", &win_id_arg, "--", workspace],
         )
         .with_context(|| "Failed to execute move_node_to_workspace.")?;
 
@@ -396,5 +413,26 @@ pub mod tests {
         let windows = aerospace.list_windows();
 
         assert!(windows.is_err());
+    }
+
+    #[test]
+    fn test_list_windows_missing_optional_fields_default() {
+        let executor = MockAerospaceCommandExecutor::with_success(
+            r#"[{
+                "window-id" : 1,
+                "app-name" : "TestApp",
+                "workspace" : "1"
+            }]"#,
+        );
+
+        let aerospace = Aerospace::new(executor);
+        let windows = aerospace
+            .list_windows()
+            .expect("Should parse listed windows.");
+        let window = windows.first().unwrap();
+
+        assert_eq!(window.window_id, 1);
+        assert_eq!(window.window_title, "");
+        assert_eq!(window.app_bundle_id, "");
     }
 }

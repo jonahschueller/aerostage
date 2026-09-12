@@ -2,7 +2,7 @@ use crate::{
     aerospace::AerospaceWindow,
     restore::{
         rule::WindowResolverRule,
-        types::{ResolveTarget, ResolvedWindowMatch},
+        types::{ResolveTarget, ResolvedWindowMatch, present_text},
     },
 };
 
@@ -14,22 +14,13 @@ impl WindowResolverRule for TitleMatchResolverRule {
         windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
-        let target_title = target.target_window.title.as_ref()?;
-
-        let title_regex = regex::RegexBuilder::new(&regex::escape(target_title))
-            .case_insensitive(true)
-            .build()
-            .ok();
+        let target_title = present_text(target.target_window.title.as_deref())?;
+        let target_title_lowercase = target_title.to_lowercase();
 
         let mut matches = windows
             .iter()
             .filter(|window| target.matches_window_app(window))
-            .filter(|window| {
-                target_title.to_lowercase() == window.window_title.to_lowercase()
-                    || title_regex
-                        .as_ref()
-                        .is_some_and(|re| re.is_match(&window.window_title))
-            });
+            .filter(|window| window.window_title.to_lowercase() == target_title_lowercase);
 
         match (matches.next(), matches.next()) {
             (Some(first_match), None) => Some(ResolvedWindowMatch {
@@ -51,34 +42,28 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
         windows: &[AerospaceWindow],
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
-        let target_title = target.target_window.title.as_ref()?;
-
-        let app_window_candidates = windows
-            .iter()
-            .filter(|window| target.matches_window_app(window));
+        let target_title = present_text(target.target_window.title.as_deref())?;
 
         let target_title_lowercase = target_title.to_lowercase();
 
-        let mut ranked_matches: Vec<(&AerospaceWindow, f64)> = app_window_candidates
-            .map(|window| {
-                let score = strsim::normalized_levenshtein(
+        let ranked_matches: Vec<&AerospaceWindow> = windows
+            .iter()
+            .filter(|window| target.matches_window_app(window))
+            .filter(|window| {
+                strsim::normalized_levenshtein(
                     &target_title_lowercase,
                     &window.window_title.to_lowercase(),
-                );
-
-                (window, score)
+                ) >= self.threshold
             })
-            .filter(|(_, score)| *score >= self.threshold)
             .collect();
 
-        ranked_matches.sort_by(|a, b| b.1.total_cmp(&a.1));
-
-        let first_match = ranked_matches.first()?;
-
-        Some(ResolvedWindowMatch {
-            target_workspace: target.target_workspace.name.clone(),
-            window_id: first_match.0.window_id,
-        })
+        match ranked_matches.as_slice() {
+            [first_match] => Some(ResolvedWindowMatch {
+                target_workspace: target.target_workspace.name.clone(),
+                window_id: first_match.window_id,
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -172,7 +157,7 @@ mod test {
     }
 
     #[test]
-    fn test_title_match_regex_substring_match() {
+    fn test_title_match_does_not_use_substring() {
         let (target_window, target_workspace) =
             create_target("Browser", "com.browser.app", Some("GitHub"), "workspace-1");
         let target = ResolveTarget {
@@ -180,7 +165,6 @@ mod test {
             target_workspace: &target_workspace,
         };
 
-        // RegEx "GitHub" should match "Dashboard - GitHub - Safari"
         let windows = vec![
             AerospaceWindow::dummy()
                 .with_window_id(42)
@@ -192,13 +176,29 @@ mod test {
         let resolver = TitleMatchResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "workspace-1".to_string(),
-                window_id: 42,
-            })
-        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_title_match_empty_title_returns_none() {
+        let (target_window, target_workspace) =
+            create_target("Terminal", "com.apple.Terminal", Some(""), "dev");
+        let target = ResolveTarget {
+            target_window: &target_window,
+            target_workspace: &target_workspace,
+        };
+
+        let windows = vec![
+            AerospaceWindow::dummy()
+                .with_app_name("Terminal")
+                .with_bundle_id("com.apple.Terminal")
+                .with_window_title("zsh"),
+        ];
+
+        let resolver = TitleMatchResolverRule {};
+        let result = resolver.match_window(&windows, &target);
+
+        assert_eq!(result, None);
     }
 
     #[test]
@@ -359,6 +359,38 @@ mod test {
         ];
 
         let resolver = TitleSimilarityResolverRule { threshold: 0.1 };
+        let result = resolver.match_window(&windows, &target);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_similarity_multiple_matches_returns_none() {
+        let (target_window, target_workspace) = create_target(
+            "Notes",
+            "com.apple.Notes",
+            Some("Project Ideas 2026"),
+            "work",
+        );
+        let target = ResolveTarget {
+            target_window: &target_window,
+            target_workspace: &target_workspace,
+        };
+
+        let windows = vec![
+            AerospaceWindow::dummy()
+                .with_window_id(10)
+                .with_app_name("Notes")
+                .with_bundle_id("com.apple.Notes")
+                .with_window_title("Project Ideas 2025"),
+            AerospaceWindow::dummy()
+                .with_window_id(20)
+                .with_app_name("Notes")
+                .with_bundle_id("com.apple.Notes")
+                .with_window_title("Project Ideas 2024"),
+        ];
+
+        let resolver = TitleSimilarityResolverRule { threshold: 0.6 };
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);

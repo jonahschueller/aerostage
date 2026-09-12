@@ -10,9 +10,17 @@ pub struct CaptureCommandHandler {
     pub default_workspace: Option<String>,
 }
 
+pub(crate) fn parse_workspace_list(workspaces: &str) -> Vec<&str> {
+    workspaces
+        .split(',')
+        .map(str::trim)
+        .filter(|workspace| !workspace.is_empty())
+        .collect()
+}
+
 impl CommandHandler for CaptureCommandHandler {
     fn run_command(&self, config: &crate::config::Config) -> Result<()> {
-        Aerospace::ensure_aerospace_installed();
+        Aerospace::ensure_aerospace_installed()?;
         let aerospace = Aerospace::default();
 
         let stage_filepath = self
@@ -20,10 +28,7 @@ impl CommandHandler for CaptureCommandHandler {
             .as_deref()
             .map(|out| config.stage_directory.join(out));
 
-        let capture_workspaces = self
-            .workspaces
-            .as_ref()
-            .map(|ws| ws.split(",").collect::<Vec<_>>());
+        let capture_workspaces = self.workspaces.as_deref().map(parse_workspace_list);
 
         let capturer = StageCapturer::new(&aerospace);
 
@@ -49,5 +54,16 @@ impl CommandHandler for CaptureCommandHandler {
         stage.write(writer).context("Failed to capture stage.")?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_workspace_list_trims_and_drops_empty_entries() {
+        assert_eq!(parse_workspace_list("1, 2, 3"), vec!["1", "2", "3"]);
+        assert_eq!(parse_workspace_list("1,,2,"), vec!["1", "2"]);
     }
 }

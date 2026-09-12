@@ -66,12 +66,6 @@ impl Commands {
     }
 }
 
-pub fn execute_command(command: Commands, config: &Config) {
-    let command_handler = command.create_handler();
-
-    let result = command_handler.run_command(config);
-
-    if let Err(err) = result {
-        eprintln!("Failed to execute command: {}", err);
-    }
+pub fn execute_command(command: Commands, config: &Config) -> Result<()> {
+    command.create_handler().run_command(config)
 }

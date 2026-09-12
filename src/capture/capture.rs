@@ -54,9 +54,9 @@ impl<'a> StageCapturer<'a> {
         let workspaces: Vec<StageWorkspace> = aerospace_workspaces
             .into_iter()
             .filter(|ws| {
-                workspace_filter_set.as_ref().is_none_or(|filter_set| {
-                    filter_set.contains(ws.workspace.as_str())
-                })
+                workspace_filter_set
+                    .as_ref()
+                    .is_none_or(|filter_set| filter_set.contains(ws.workspace.as_str()))
             })
             .filter_map(|ws| {
                 let windows = windows_by_workspace.remove(ws.workspace.as_str())?;

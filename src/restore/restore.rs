@@ -33,10 +33,7 @@ struct RestorePlan {
 }
 
 impl RestorePlan {
-    fn resolve(
-        resolution: &WindowResolution,
-        live_windows: &[AerospaceWindow],
-    ) -> Result<RestorePlan> {
+    fn resolve(resolution: &WindowResolution, live_windows: &[AerospaceWindow]) -> RestorePlan {
         let live_workspace_lookup: HashMap<&AerospaceWindowId, &AerospaceWorkspaceId> =
             live_windows
                 .iter()
@@ -60,13 +57,15 @@ impl RestorePlan {
             })
             .collect();
 
-        Ok(RestorePlan { plan: actions })
+        RestorePlan { plan: actions }
     }
 
-    fn restore(&self, aerospace: &Aerospace) {
+    fn restore(&self, aerospace: &Aerospace) -> Result<()> {
         for action in &self.plan {
-            action.execute(aerospace).expect("Failed to restore stage.")
+            action.execute(aerospace)?;
         }
+
+        Ok(())
     }
 }
 
@@ -75,8 +74,8 @@ pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
 
     let resolution = WindowResolution::resolve(stage, &live_windows);
 
-    let restore_plan = RestorePlan::resolve(&resolution, &live_windows)?;
-    restore_plan.restore(aerospace);
+    let restore_plan = RestorePlan::resolve(&resolution, &live_windows);
+    restore_plan.restore(aerospace)?;
 
     for target in resolution.pending_targets {
         let window = target.target_window;
@@ -94,7 +93,44 @@ pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::restore::{resolution::WindowResolution, types::ResolvedWindowMatch};
 
     #[test]
-    fn test_restore_stage_successfully() {}
+    fn skips_windows_already_on_the_target_workspace() {
+        let live_windows = vec![
+            AerospaceWindow::dummy()
+                .with_window_id(1)
+                .with_workspace("1"),
+            AerospaceWindow::dummy()
+                .with_window_id(2)
+                .with_workspace("1"),
+        ];
+        let resolution = WindowResolution {
+            resolved_windows: vec![
+                ResolvedWindowMatch {
+                    target_workspace: "1".into(),
+                    window_id: 1,
+                },
+                ResolvedWindowMatch {
+                    target_workspace: "2".into(),
+                    window_id: 2,
+                },
+            ],
+            pending_targets: Vec::new(),
+            unresolved_windows: Vec::new(),
+        };
+
+        let plan = RestorePlan::resolve(&resolution, &live_windows);
+
+        assert_eq!(plan.plan.len(), 1);
+        match &plan.plan[0] {
+            RestoreAction::MoveToWorkspace {
+                workspace,
+                target_window,
+            } => {
+                assert_eq!(workspace, "2");
+                assert_eq!(*target_window, 2);
+            }
+        }
+    }
 }

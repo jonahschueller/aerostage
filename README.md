@@ -56,7 +56,7 @@ Capture only some workspaces:
 aerostage capture work.toml --workspaces 1,2,3
 ```
 
-`--workspaces` is a comma-separated list of AeroSpace workspace names.
+`--workspaces` is a comma-separated list of AeroSpace workspace names. Spaces around names are ignored (`1, 2, 3` is the same as `1,2,3`).
 
 ## Restore
 
@@ -97,17 +97,17 @@ Optional fields:
 | Field | Meaning |
 | --- | --- |
 | `description` | Free-text note. Capture leaves this empty. |
-| `default_workspace` | If set, leftover live windows (ones the stage did not claim) are moved here. |
+| `default_workspace` | If set, leftover live windows (ones the stage did not claim) are moved here. Windows that still look like they belong to an unmatched stage entry are left where they are. |
 
-You can drop `title` (or `app` / `bundle_id`) when you edit a stage. Restore uses whatever is present to identify windows.
+You can drop `title`, `app`, or `bundle_id` when you edit a stage. Restore uses whatever is present to identify windows. If both `app` and `bundle_id` are set, a live window must match both.
 
 ## How restore matches windows
 
 Window ids change every launch, so restore scores open windows against each entry in the stage. It tries, in order:
 
-1. Same app, same title (case-insensitive; the stored title is also treated as a regex)
-2. Same app, similar title (enough overlap to ignore small title changes)
-3. Same app, already on the target workspace, and only one such window
+1. Same app identity and the same title (case-insensitive exact match)
+2. Same app identity and a similar title (enough overlap to ignore small title changes), but only if exactly one remaining window is similar enough
+3. Same app identity, already on the target workspace, and only one such window
 4. Unique bundle id among remaining windows
 5. Unique app name among remaining windows
 

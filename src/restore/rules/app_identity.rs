@@ -2,7 +2,7 @@ use crate::{
     aerospace::AerospaceWindow,
     restore::{
         rule::WindowResolverRule,
-        types::{ResolveTarget, ResolvedWindowMatch},
+        types::{ResolveTarget, ResolvedWindowMatch, present_text},
     },
 };
 
@@ -15,10 +15,7 @@ impl WindowResolverRule for UniqueBundleIdResolverRule {
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
         let mut bundle_id_matches = windows.iter().filter(|window| {
-            target
-                .target_window
-                .bundle_id
-                .as_deref()
+            present_text(target.target_window.bundle_id.as_deref())
                 .is_some_and(|bundle_id| window.app_bundle_id == bundle_id)
         });
 
@@ -41,10 +38,7 @@ impl WindowResolverRule for UniqueAppNameResolverRule {
         target: &ResolveTarget,
     ) -> Option<ResolvedWindowMatch> {
         let mut matches = windows.iter().filter(|window| {
-            target
-                .target_window
-                .app
-                .as_deref()
+            present_text(target.target_window.app.as_deref())
                 .is_some_and(|app| window.app_name == app)
         });
 
@@ -260,6 +254,23 @@ mod test {
         ];
 
         let resolver = UniqueAppNameResolverRule {};
+        let result = resolver.match_window(&windows, &target);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_bundle_id_empty_string_returns_none() {
+        let window = StageWindow::dummy().with_bundle_id("");
+        let workspace = StageWorkspace::dummy().with_name("workspace-1");
+        let target = ResolveTarget {
+            target_window: &window,
+            target_workspace: &workspace,
+        };
+
+        let windows = vec![AerospaceWindow::dummy().with_bundle_id("")];
+
+        let resolver = UniqueBundleIdResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);
