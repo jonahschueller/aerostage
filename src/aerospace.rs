@@ -302,7 +302,7 @@ impl<E: CommandExecutor> Aerospace<E> {
 
         self.execute_aerospace(
             &AerospaceCommand::ChangeLayout,
-            &["--workspace", workspace, &layout_str],
+            &["--workspace", workspace, "--root", &layout_str],
         )
         .with_context(|| "Failed to execute 'layout'.")?;
 
