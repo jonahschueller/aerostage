@@ -4,6 +4,7 @@ mod cli;
 mod config;
 mod restore;
 mod stage;
+mod types;
 
 use std::process::exit;
 

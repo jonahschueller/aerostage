@@ -5,19 +5,8 @@ use anyhow::Result;
 use crate::{
     aerospace::{Aerospace, AerospaceLayout, AerospaceWindow, AerospaceWindowId},
     restore::resolution::WindowResolution,
-    stage::{Stage, StageWorkspace, StageWorkspaceLayout},
+    stage::{Stage, StageWorkspace},
 };
-
-impl Into<AerospaceLayout> for StageWorkspaceLayout {
-    fn into(self) -> AerospaceLayout {
-        match self {
-            StageWorkspaceLayout::HTiles => AerospaceLayout::HTiles,
-            StageWorkspaceLayout::VTiles => AerospaceLayout::VTiles,
-            StageWorkspaceLayout::HAccordion => AerospaceLayout::HAccordion,
-            StageWorkspaceLayout::VAccordion => AerospaceLayout::VAccordion,
-        }
-    }
-}
 
 #[derive(Debug)]
 enum RestoreAction {
@@ -163,8 +152,9 @@ pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::restore::{
-        resolution::WindowResolution, rules::workspace, types::ResolvedWindowMatch,
+    use crate::{
+        restore::{resolution::WindowResolution, rules::workspace, types::ResolvedWindowMatch},
+        stage::StageWorkspaceLayout,
     };
 
     #[test]

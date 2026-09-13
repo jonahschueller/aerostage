@@ -2,19 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result};
 
-use crate::aerospace::{Aerospace, AerospaceLayout};
-use crate::stage::{Stage, StageWindow, StageWorkspace, StageWorkspaceLayout};
-
-impl Into<StageWorkspaceLayout> for AerospaceLayout {
-    fn into(self) -> StageWorkspaceLayout {
-        match self {
-            AerospaceLayout::HTiles => StageWorkspaceLayout::HTiles,
-            AerospaceLayout::VTiles => StageWorkspaceLayout::VTiles,
-            AerospaceLayout::HAccordion => StageWorkspaceLayout::HAccordion,
-            AerospaceLayout::VAccordion => StageWorkspaceLayout::VAccordion,
-        }
-    }
-}
+use crate::aerospace::Aerospace;
+use crate::stage::{Stage, StageWindow, StageWorkspace};
 
 pub struct StageCapturer<'a> {
     pub aerospace: &'a Aerospace,
