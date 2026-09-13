@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::{
-    aerospace::{
-        Aerospace, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId,
-    },
+    aerospace::{Aerospace, AerospaceLayout, AerospaceWindow, AerospaceWindowId},
     restore::resolution::WindowResolution,
     stage::{Stage, StageWorkspace, StageWorkspaceLayout},
 };
@@ -31,6 +29,9 @@ enum RestoreAction {
         workspace: String,
         target_layout: AerospaceLayout,
     },
+    FlattenWorkspace {
+        workspace: String,
+    },
 }
 
 impl RestoreAction {
@@ -44,6 +45,7 @@ impl RestoreAction {
                 workspace,
                 target_layout,
             } => aerospace.change_layout(workspace, target_layout),
+            Self::FlattenWorkspace { workspace } => aerospace.flatten_workspace_tree(workspace),
         }
     }
 }
@@ -54,40 +56,76 @@ struct RestorePlan {
 }
 
 impl RestorePlan {
-    fn resolve(
+    fn resolve_layout_actions(
         workspaces: &[StageWorkspace],
-        resolution: &WindowResolution,
-        live_windows: &[AerospaceWindow],
-    ) -> RestorePlan {
-        let live_workspace_lookup: HashMap<&AerospaceWindowId, &AerospaceWorkspaceId> =
-            live_windows
-                .iter()
-                .map(|w| (&w.window_id, &w.workspace))
-                .collect();
-
-        let mut actions: Vec<RestoreAction> = Vec::new();
-
-        actions.extend(workspaces.iter().filter_map(|ws| {
+    ) -> impl Iterator<Item = RestoreAction> + '_ {
+        workspaces.iter().filter_map(|ws| {
             ws.layout
                 .as_ref()
                 .map(|layout| RestoreAction::ChangeLayout {
                     workspace: ws.name.clone(),
                     target_layout: layout.clone().into(),
                 })
-        }));
+        })
+    }
 
-        actions.extend(resolution.resolved_windows.iter().filter_map(|mapping| {
-            let current_workspace = live_workspace_lookup.get(&mapping.window_id)?;
-
-            if *current_workspace != &mapping.target_workspace {
-                Some(RestoreAction::MoveToWorkspace {
-                    workspace: mapping.target_workspace.clone(),
-                    target_window: mapping.window_id,
+    fn resolve_flatten_workspace_actions(
+        workspaces: &[StageWorkspace],
+    ) -> impl Iterator<Item = RestoreAction> + '_ {
+        workspaces.iter().filter_map(|ws| {
+            if ws.layout.is_some() {
+                Some(RestoreAction::FlattenWorkspace {
+                    workspace: ws.name.clone(),
                 })
             } else {
                 None
             }
-        }));
+        })
+    }
+
+    fn resolve_move_window_actions<'a>(
+        resolution: &'a WindowResolution,
+        live_windows: &'a [AerospaceWindow],
+    ) -> impl Iterator<Item = RestoreAction> + 'a {
+        let live_workspace_lookup: HashMap<_, _> = live_windows
+            .iter()
+            .map(|w| (&w.window_id, &w.workspace))
+            .collect();
+
+        resolution
+            .resolved_windows
+            .iter()
+            .filter_map(move |mapping| {
+                let current_workspace = live_workspace_lookup.get(&mapping.window_id)?;
+
+                if *current_workspace != &mapping.target_workspace {
+                    Some(RestoreAction::MoveToWorkspace {
+                        workspace: mapping.target_workspace.clone(),
+                        target_window: mapping.window_id,
+                    })
+                } else {
+                    None
+                }
+            })
+    }
+
+    fn resolve(
+        workspaces: &[StageWorkspace],
+        resolution: &WindowResolution,
+        live_windows: &[AerospaceWindow],
+    ) -> RestorePlan {
+        let mut actions: Vec<RestoreAction> = Vec::with_capacity(
+            workspaces.len() + // Change layout
+            workspaces.len() + // Flatten workspace
+            resolution.resolved_windows.len(), // Move To Workspace,
+        );
+
+        actions.extend(RestorePlan::resolve_move_window_actions(
+            resolution,
+            live_windows,
+        ));
+        actions.extend(RestorePlan::resolve_flatten_workspace_actions(workspaces));
+        actions.extend(RestorePlan::resolve_layout_actions(workspaces));
 
         RestorePlan { plan: actions }
     }
