@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde::de::{DeserializeOwned, Deserializer};
+
 use std::{fmt::Display, process::Command};
 
 use anyhow::{Context, Result, anyhow, ensure};
@@ -32,9 +33,33 @@ pub struct AerospaceApp {
     pub app_pid: u32,
 }
 
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AerospaceLayout {
+    HTiles,
+    VTiles,
+    HAccordion,
+    VAccordion,
+}
+
+impl Display for AerospaceLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            AerospaceLayout::HTiles => "h_tiles",
+            AerospaceLayout::VTiles => "v_tiles",
+            AerospaceLayout::HAccordion => "h_accordion",
+            AerospaceLayout::VAccordion => "v_accordion",
+        };
+
+        write!(f, "{}", str)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AerospaceWorkspace {
     pub workspace: AerospaceWorkspaceId,
+    #[serde(rename = "workspace-root-container-layout")]
+    pub layout: AerospaceLayout,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,6 +147,8 @@ enum AerospaceCommand {
     ListMonitors,
     ListWindows,
     MoveNodeToWorkspace,
+    ChangeLayout,
+    FlattenWorkspaceTree,
 }
 
 impl Display for AerospaceCommand {
@@ -132,6 +159,8 @@ impl Display for AerospaceCommand {
             AerospaceCommand::ListMonitors => "list-monitors",
             AerospaceCommand::ListWindows => "list-windows",
             AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
+            AerospaceCommand::ChangeLayout => "layout",
+            AerospaceCommand::FlattenWorkspaceTree => "flatten-workspace-tree",
         };
         write!(f, "{s}")
     }
@@ -212,7 +241,8 @@ impl<E: CommandExecutor> Aerospace<E> {
     }
 
     pub fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
-        let fields = self.aerospace_output_format(&["workspace"]);
+        let fields =
+            self.aerospace_output_format(&["workspace", "workspace-root-container-layout"]);
         self.query_aerospace(
             &AerospaceCommand::ListWorkspaces,
             &["--all", "--format", &fields],
@@ -258,6 +288,32 @@ impl<E: CommandExecutor> Aerospace<E> {
             &["--window-id", &win_id_arg, "--", workspace],
         )
         .with_context(|| "Failed to execute move_node_to_workspace.")?;
+
+        Ok(())
+    }
+
+    pub fn change_layout(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        layout: &AerospaceLayout,
+    ) -> Result<()> {
+        let layout_str = layout.to_string();
+
+        self.execute_aerospace(
+            &AerospaceCommand::ChangeLayout,
+            &["--workspace", workspace, "--root", &layout_str],
+        )
+        .with_context(|| "Failed to execute 'layout'.")?;
+
+        Ok(())
+    }
+
+    pub fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
+        self.execute_aerospace(
+            &AerospaceCommand::FlattenWorkspaceTree,
+            &["--workspace", workspace],
+        )
+        .with_context(|| "Failed to execute flatten_workspace_tree.")?;
 
         Ok(())
     }

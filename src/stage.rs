@@ -15,11 +15,21 @@ pub struct Stage {
     pub default_workspace: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum StageWorkspaceLayout {
+    HTiles,
+    VTiles,
+    HAccordion,
+    VAccordion,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StageWorkspace {
     pub name: String,
     #[serde(rename = "window", default)]
     pub windows: Vec<StageWindow>,
+    pub layout: Option<StageWorkspaceLayout>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -138,6 +148,7 @@ impl StageWorkspace {
         StageWorkspace {
             name: "1".into(),
             windows: Vec::new(),
+            layout: None,
         }
     }
 
@@ -169,12 +180,16 @@ name = "empty"
 
 [[workspace]]
 name = "1"
+layout = "h_tiles"
 "#,
         )
         .unwrap();
 
         assert_eq!(stage.workspaces.len(), 1);
-        assert!(stage.workspaces[0].windows.is_empty());
+        let workspace = stage.workspaces.first().unwrap();
+        assert!(workspace.windows.is_empty());
+        assert!(workspace.layout.is_some());
+        assert_eq!(workspace.layout, Some(StageWorkspaceLayout::HTiles));
     }
 
     #[test]
