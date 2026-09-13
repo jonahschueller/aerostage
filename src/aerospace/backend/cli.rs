@@ -1,94 +1,13 @@
-use serde::Deserialize;
-use serde::de::{DeserializeOwned, Deserializer};
-
-use std::{fmt::Display, process::Command};
+use std::fmt::Display;
+use std::process::Command;
 
 use anyhow::{Context, Result, anyhow, ensure};
+use serde::de::DeserializeOwned;
 
-pub type AerospaceWindowId = u32;
-pub type AerospaceWorkspaceId = String;
-
-fn null_to_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Default + Deserialize<'de>,
-{
-    Ok(Option::deserialize(deserializer)?.unwrap_or_default())
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AerospaceApp {
-    #[allow(dead_code)]
-    #[serde(
-        rename = "app-bundle-id",
-        default,
-        deserialize_with = "null_to_default"
-    )]
-    pub app_bundle_id: String,
-    #[allow(dead_code)]
-    #[serde(rename = "app-name", default, deserialize_with = "null_to_default")]
-    pub app_name: String,
-    #[allow(dead_code)]
-    #[serde(rename = "app-pid")]
-    pub app_pid: u32,
-}
-
-#[derive(Debug, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum AerospaceLayout {
-    HTiles,
-    VTiles,
-    HAccordion,
-    VAccordion,
-}
-
-impl Display for AerospaceLayout {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            AerospaceLayout::HTiles => "h_tiles",
-            AerospaceLayout::VTiles => "v_tiles",
-            AerospaceLayout::HAccordion => "h_accordion",
-            AerospaceLayout::VAccordion => "v_accordion",
-        };
-
-        write!(f, "{}", str)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AerospaceWorkspace {
-    pub workspace: AerospaceWorkspaceId,
-    #[serde(rename = "workspace-root-container-layout")]
-    pub layout: AerospaceLayout,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AerospaceMonitor {
-    #[allow(dead_code)]
-    #[serde(rename = "monitor-id")]
-    pub monitor_id: i32,
-    #[allow(dead_code)]
-    #[serde(rename = "monitor-name", default, deserialize_with = "null_to_default")]
-    pub monitor_name: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AerospaceWindow {
-    #[serde(rename = "window-id")]
-    pub window_id: AerospaceWindowId,
-    #[serde(rename = "window-title", default, deserialize_with = "null_to_default")]
-    pub window_title: String,
-    #[serde(rename = "app-name", default, deserialize_with = "null_to_default")]
-    pub app_name: String,
-    #[serde(
-        rename = "app-bundle-id",
-        default,
-        deserialize_with = "null_to_default"
-    )]
-    pub app_bundle_id: String,
-    #[serde(rename = "workspace", default, deserialize_with = "null_to_default")]
-    pub workspace: AerospaceWorkspaceId,
-}
+use crate::aerospace::{
+    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
+    AerospaceWorkspaceId, backend::AerospaceBackend,
+};
 
 pub trait CommandExecutor {
     fn execute(&self, command: &str, args: &[&str]) -> Result<String>;
@@ -114,34 +33,7 @@ impl CommandExecutor for AerospaceCommandExecutor {
     }
 }
 
-#[cfg(test)]
-pub struct MockExecutor {
-    pub stdout: String,
-    pub should_succeed: bool,
-}
-
-#[cfg(test)]
-impl Default for MockExecutor {
-    fn default() -> Self {
-        Self {
-            stdout: "[]".to_string(),
-            should_succeed: true,
-        }
-    }
-}
-
-#[cfg(test)]
-impl CommandExecutor for MockExecutor {
-    fn execute(&self, _command: &str, _args: &[&str]) -> Result<String> {
-        if self.should_succeed {
-            Ok(self.stdout.clone())
-        } else {
-            Err(anyhow::anyhow!("Mocked CLI failure"))
-        }
-    }
-}
-
-enum AerospaceCommand {
+pub enum AerospaceCommand {
     ListApps,
     ListWorkspaces,
     ListMonitors,
@@ -166,11 +58,11 @@ impl Display for AerospaceCommand {
     }
 }
 
-pub struct Aerospace<E: CommandExecutor = AerospaceCommandExecutor> {
+pub struct AerospaceCliCBackend<E: CommandExecutor = AerospaceCommandExecutor> {
     executor: E,
 }
 
-impl Default for Aerospace {
+impl Default for AerospaceCliCBackend {
     fn default() -> Self {
         Self {
             executor: AerospaceCommandExecutor {},
@@ -178,28 +70,7 @@ impl Default for Aerospace {
     }
 }
 
-impl Aerospace {
-    pub fn ensure_aerospace_installed() -> Result<()> {
-        which::which("aerospace").map(|_| ()).map_err(|_| {
-            anyhow!(
-                "'aerospace' command not found. Please install AeroSpace and put it on your PATH."
-            )
-        })
-    }
-}
-
-#[cfg(test)]
-impl Aerospace<MockExecutor> {
-    #[cfg(test)]
-    fn mock() -> Self {
-        Self {
-            executor: MockExecutor::default(),
-        }
-    }
-}
-
-impl<E: CommandExecutor> Aerospace<E> {
-    #[allow(dead_code)]
+impl<E: CommandExecutor> AerospaceCliCBackend<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
     }
@@ -229,9 +100,10 @@ impl<E: CommandExecutor> Aerospace<E> {
             .collect::<Vec<_>>()
             .join(" ")
     }
+}
 
-    #[allow(dead_code)]
-    pub fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
+impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
+    fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
         let fields = self.aerospace_output_format(&["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
             &AerospaceCommand::ListApps,
@@ -240,7 +112,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         .with_context(|| "Failed to execute list-apps.")
     }
 
-    pub fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
+    fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
         let fields =
             self.aerospace_output_format(&["workspace", "workspace-root-container-layout"]);
         self.query_aerospace(
@@ -250,17 +122,16 @@ impl<E: CommandExecutor> Aerospace<E> {
         .with_context(|| "Failed to execute list-workspaces.")
     }
 
-    #[allow(dead_code)]
-    pub fn list_monitors(&self) -> Result<Vec<AerospaceMonitor>> {
-        let fields = self.aerospace_output_format(&["monitor-id", "monitor-name"]);
-        self.query_aerospace::<Vec<AerospaceMonitor>>(
-            &AerospaceCommand::ListMonitors,
-            &["--format", &fields],
-        )
-        .with_context(|| "Failed to execute list-monitors.")
-    }
+    // pub fn list_monitors(&self) -> Result<Vec<AerospaceMonitor>> {
+    //     let fields = self.aerospace_output_format(&["monitor-id", "monitor-name"]);
+    //     self.query_aerospace::<Vec<AerospaceMonitor>>(
+    //         &AerospaceCommand::ListMonitors,
+    //         &["--format", &fields],
+    //     )
+    //     .with_context(|| "Failed to execute list-monitors.")
+    // }
 
-    pub fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
+    fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
         let fields = self.aerospace_output_format(&[
             "window-id",
             "window-title",
@@ -276,7 +147,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         .with_context(|| "Failed to execute list-windows.")
     }
 
-    pub fn move_node_to_workspace(
+    fn move_node_to_workspace(
         &self,
         workspace: &AerospaceWorkspaceId,
         window_id: AerospaceWindowId,
@@ -292,11 +163,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         Ok(())
     }
 
-    pub fn change_layout(
-        &self,
-        workspace: &AerospaceWorkspaceId,
-        layout: &AerospaceLayout,
-    ) -> Result<()> {
+    fn layout(&self, workspace: &AerospaceWorkspaceId, layout: &AerospaceLayout) -> Result<()> {
         let layout_str = layout.to_string();
 
         self.execute_aerospace(
@@ -308,7 +175,7 @@ impl<E: CommandExecutor> Aerospace<E> {
         Ok(())
     }
 
-    pub fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
+    fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
         self.execute_aerospace(
             &AerospaceCommand::FlattenWorkspaceTree,
             &["--workspace", workspace],
@@ -319,77 +186,37 @@ impl<E: CommandExecutor> Aerospace<E> {
     }
 }
 
-impl AerospaceWindow {
-    #[cfg(test)]
-    pub fn dummy() -> Self {
-        AerospaceWindow {
-            app_bundle_id: "com.example.test".into(),
-            app_name: "Test App".into(),
-            window_id: 0,
-            workspace: "1".into(),
-            window_title: "Test Title".into(),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn with_bundle_id(mut self, bundle_id: &str) -> Self {
-        self.app_bundle_id = bundle_id.to_string();
-        self
-    }
-
-    #[cfg(test)]
-    pub fn with_window_id(mut self, window_id: u32) -> Self {
-        self.window_id = window_id;
-        self
-    }
-
-    #[cfg(test)]
-    pub fn with_app_name(mut self, app_name: &str) -> Self {
-        self.app_name = app_name.to_string();
-        self
-    }
-
-    #[cfg(test)]
-    pub fn with_workspace(mut self, workspace: &str) -> Self {
-        self.workspace = workspace.to_string();
-        self
-    }
-
-    #[cfg(test)]
-    pub fn with_window_title(mut self, window_title: &str) -> Self {
-        self.window_title = window_title.to_string();
-        self
-    }
-}
-
 #[cfg(test)]
-pub mod tests {
-
+mod tests {
     use super::*;
 
-    pub struct MockAerospaceCommandExecutor {
-        result: Result<String>,
+    struct MockAerospaceCommandExecutor {
+        stdout: String,
+        should_succeed: bool,
     }
 
     impl MockAerospaceCommandExecutor {
-        fn with_success(value: &str) -> MockAerospaceCommandExecutor {
-            MockAerospaceCommandExecutor {
-                result: Ok(value.to_string()),
+        fn with_success(stdout: &str) -> Self {
+            Self {
+                stdout: stdout.to_string(),
+                should_succeed: true,
             }
         }
 
-        fn with_failure(error: &str) -> MockAerospaceCommandExecutor {
-            MockAerospaceCommandExecutor {
-                result: Err(anyhow!(error.to_string())),
+        fn with_failure(_message: &str) -> Self {
+            Self {
+                stdout: String::new(),
+                should_succeed: false,
             }
         }
     }
 
     impl CommandExecutor for MockAerospaceCommandExecutor {
-        fn execute(&self, command: &str, args: &[&str]) -> Result<String> {
-            match &self.result {
-                Ok(val) => Ok(val.clone()),
-                Err(err) => Err(anyhow::anyhow!("{err}")),
+        fn execute(&self, _command: &str, _args: &[&str]) -> Result<String> {
+            if self.should_succeed {
+                Ok(self.stdout.clone())
+            } else {
+                Err(anyhow!("Mocked CLI failure"))
             }
         }
     }
@@ -405,9 +232,9 @@ pub mod tests {
             ]"#,
         );
 
-        let aerospace = Aerospace::new(executor);
+        let backend = AerospaceCliCBackend::new(executor);
 
-        let apps = aerospace.list_apps().expect("Should parse listed apps.");
+        let apps = backend.list_apps().expect("Should parse listed apps.");
 
         assert_eq!(apps.len(), 1);
 
@@ -422,9 +249,9 @@ pub mod tests {
         let executor =
             MockAerospaceCommandExecutor::with_failure(r#"Failed to execute aerospace."#);
 
-        let aerospace = Aerospace::new(executor);
+        let backend = AerospaceCliCBackend::new(executor);
 
-        let apps = aerospace.list_apps();
+        let apps = backend.list_apps();
 
         assert!(apps.is_err());
     }
@@ -442,9 +269,9 @@ pub mod tests {
             ]"#,
         );
 
-        let aerospace = Aerospace::new(executor);
+        let backend = AerospaceCliCBackend::new(executor);
 
-        let windows = aerospace
+        let windows = backend
             .list_windows()
             .expect("Should parse listed windows.");
 
@@ -464,9 +291,9 @@ pub mod tests {
             r#"ERROR: Failed to parse <output-format>. Unbalanced curly braces"#,
         );
 
-        let aerospace = Aerospace::new(executor);
+        let backend = AerospaceCliCBackend::new(executor);
 
-        let windows = aerospace.list_windows();
+        let windows = backend.list_windows();
 
         assert!(windows.is_err());
     }
@@ -481,8 +308,8 @@ pub mod tests {
             }]"#,
         );
 
-        let aerospace = Aerospace::new(executor);
-        let windows = aerospace
+        let backend = AerospaceCliCBackend::new(executor);
+        let windows = backend
             .list_windows()
             .expect("Should parse listed windows.");
         let window = windows.first().unwrap();
