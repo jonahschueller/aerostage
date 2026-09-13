@@ -151,6 +151,7 @@ enum AerospaceCommand {
     ListWindows,
     MoveNodeToWorkspace,
     ChangeLayout,
+    FlattenWorkspaceTree,
 }
 
 impl Display for AerospaceCommand {
@@ -162,6 +163,7 @@ impl Display for AerospaceCommand {
             AerospaceCommand::ListWindows => "list-windows",
             AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
             AerospaceCommand::ChangeLayout => "layout",
+            AerospaceCommand::FlattenWorkspaceTree => "flatten-workspace-tree",
         };
         write!(f, "{s}")
     }
@@ -305,6 +307,16 @@ impl<E: CommandExecutor> Aerospace<E> {
             &["--workspace", workspace, "--root", &layout_str],
         )
         .with_context(|| "Failed to execute 'layout'.")?;
+
+        Ok(())
+    }
+
+    pub fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
+        self.execute_aerospace(
+            &AerospaceCommand::FlattenWorkspaceTree,
+            &["--workspace", workspace],
+        )
+        .with_context(|| "Failed to execute flatten_workspace_tree.")?;
 
         Ok(())
     }
