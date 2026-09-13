@@ -6,7 +6,11 @@ use serde::de::DeserializeOwned;
 
 use crate::aerospace::{
     AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
-    AerospaceWorkspaceId, backend::AerospaceBackend,
+    AerospaceWorkspaceId,
+    backend::{
+        AerospaceBackend,
+        common::{AerospaceCommand, format_aerospace},
+    },
 };
 
 pub trait CommandExecutor {
@@ -30,31 +34,6 @@ impl CommandExecutor for AerospaceCommandExecutor {
         );
 
         String::from_utf8(output.stdout).map_err(|e| anyhow!("Invalid UTF-8 output: {e}"))
-    }
-}
-
-pub enum AerospaceCommand {
-    ListApps,
-    ListWorkspaces,
-    ListMonitors,
-    ListWindows,
-    MoveNodeToWorkspace,
-    ChangeLayout,
-    FlattenWorkspaceTree,
-}
-
-impl Display for AerospaceCommand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            AerospaceCommand::ListApps => "list-apps",
-            AerospaceCommand::ListWorkspaces => "list-workspaces",
-            AerospaceCommand::ListMonitors => "list-monitors",
-            AerospaceCommand::ListWindows => "list-windows",
-            AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
-            AerospaceCommand::ChangeLayout => "layout",
-            AerospaceCommand::FlattenWorkspaceTree => "flatten-workspace-tree",
-        };
-        write!(f, "{s}")
     }
 }
 
@@ -92,19 +71,11 @@ impl<E: CommandExecutor> AerospaceCliCBackend<E> {
         serde_json::from_str(&output)
             .map_err(|error| anyhow!("Failed to deserialize {} response: {}", command, error))
     }
-
-    fn aerospace_output_format(&self, included_fields: &[&str]) -> String {
-        included_fields
-            .iter()
-            .map(|field| format!("%{{{}}}", field))
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
 }
 
 impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
     fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
-        let fields = self.aerospace_output_format(&["app-bundle-id", "app-name", "app-pid"]);
+        let fields = format_aerospace(&["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
             &AerospaceCommand::ListApps,
             &["--format", &fields],
@@ -113,8 +84,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
     }
 
     fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
-        let fields =
-            self.aerospace_output_format(&["workspace", "workspace-root-container-layout"]);
+        let fields = format_aerospace(&["workspace", "workspace-root-container-layout"]);
         self.query_aerospace(
             &AerospaceCommand::ListWorkspaces,
             &["--all", "--format", &fields],
@@ -132,7 +102,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
     // }
 
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
-        let fields = self.aerospace_output_format(&[
+        let fields = format_aerospace(&[
             "window-id",
             "window-title",
             "app-name",

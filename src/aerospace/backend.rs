@@ -1,4 +1,5 @@
 mod cli;
+mod common;
 #[cfg(test)]
 pub mod mock;
 mod socket;
