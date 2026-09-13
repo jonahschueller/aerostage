@@ -1,5 +1,7 @@
 mod cli;
+#[cfg(test)]
 pub mod mock;
+mod socket;
 mod types;
 
 use anyhow::Result;
@@ -10,6 +12,7 @@ use crate::aerospace::{
 };
 
 pub use cli::*;
+pub use socket::*;
 pub use types::*;
 
 pub trait AerospaceBackend {
