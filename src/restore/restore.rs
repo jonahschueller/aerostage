@@ -226,8 +226,14 @@ mod tests {
 
         let plan = RestorePlan::resolve(&workspaces, &resolution, &live_windows);
 
-        assert_eq!(plan.plan.len(), 1);
+        assert_eq!(plan.plan.len(), 2);
         match &plan.plan[0] {
+            RestoreAction::FlattenWorkspace { workspace } => {
+                assert_eq!(workspace, "1");
+            }
+            _ => panic!("Expected MoveToWorkspace action, but got ChangeLayout"),
+        }
+        match &plan.plan[1] {
             RestoreAction::ChangeLayout {
                 workspace,
                 target_layout,
