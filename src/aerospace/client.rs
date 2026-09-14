@@ -10,25 +10,24 @@ pub struct Aerospace {
     backend: Box<dyn AerospaceBackend>,
 }
 
-impl Default for Aerospace {
-    fn default() -> Self {
-        let backend: Box<dyn AerospaceBackend> =
-            match AerospaceSocketBackend::with_aerospace_socket().and_then(|be| be.do_handshake()) {
-                Ok(socket) => Box::new(socket),
-                Err(_) => Box::new(AerospaceCliBackend::default()),
-            };
-
-        Self { backend }
-    }
-}
-
 impl Aerospace {
-    pub fn ensure_aerospace_installed() -> Result<()> {
-        which::which("aerospace").map(|_| ()).map_err(|_| {
-            anyhow!(
-                "'aerospace' command not found. Please install AeroSpace and put it on your PATH."
-            )
-        })
+    pub fn connect() -> Result<Self> {
+        match AerospaceSocketBackend::with_aerospace_socket().and_then(|be| be.do_handshake()) {
+            Ok(socket) => Ok(Self {
+                backend: Box::new(socket),
+            }),
+            Err(socket_err) => {
+                if which::which("aerospace").is_ok() {
+                    Ok(Self {
+                        backend: Box::new(AerospaceCliBackend::default()),
+                    })
+                } else {
+                    Err(anyhow!(
+                        "Unable to connect to AeroSpace ({socket_err}). Start AeroSpace.app, or install the `aerospace` CLI and put it on your PATH."
+                    ))
+                }
+            }
+        }
     }
 
     pub fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
