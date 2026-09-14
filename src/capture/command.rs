@@ -21,7 +21,7 @@ pub(crate) fn parse_workspace_list(workspaces: &str) -> Vec<&str> {
 impl CommandHandler for CaptureCommandHandler {
     fn run_command(&self, config: &crate::config::Config) -> Result<()> {
         Aerospace::ensure_aerospace_installed()?;
-        let aerospace = Aerospace::default();
+        let mut aerospace = Aerospace::default();
 
         let stage_filepath = self
             .output
@@ -30,7 +30,7 @@ impl CommandHandler for CaptureCommandHandler {
 
         let capture_workspaces = self.workspaces.as_deref().map(parse_workspace_list);
 
-        let capturer = StageCapturer::new(&aerospace);
+        let mut capturer = StageCapturer::new(&mut aerospace);
 
         let stage = capturer
             .capture(

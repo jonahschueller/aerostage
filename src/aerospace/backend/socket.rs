@@ -5,6 +5,7 @@ use std::{
     os::unix::net::UnixStream,
 };
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::aerospace::{
@@ -12,7 +13,7 @@ use crate::aerospace::{
     AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
-        common::AerospaceCommand,
+        common::{AerospaceCommand, format_aerospace},
         error::{AerospaceBackendError, Result},
     },
 };
@@ -182,43 +183,87 @@ impl AerospaceSocketBackend<OpenSocketState> {
     where
         T: DeserializeOwned,
     {
-        let response = self.execute_command(command, args)?;
+        let full_args: Vec<&str> = std::iter::once("--json")
+            .chain(args.iter().copied())
+            .collect();
+        let response = self.execute_command(command, &full_args)?;
 
         serde_json::from_str(&response.stdout).map_err(AerospaceBackendError::Deserialize)
     }
 }
 
 impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
-    fn list_apps(&self) -> anyhow::Result<Vec<AerospaceApp>> {
-        todo!("Not implemented");
+    fn list_apps(&mut self) -> anyhow::Result<Vec<AerospaceApp>> {
+        let fields = format_aerospace(&["app-bundle-id", "app-name", "app-pid"]);
+        self.query_command::<Vec<AerospaceApp>>(&AerospaceCommand::ListApps, &["--format", &fields])
+            .context("Failed to execute list-apps.")
     }
 
-    fn list_workspaces(&self) -> anyhow::Result<Vec<AerospaceWorkspace>> {
-        todo!("Not implemented");
+    fn list_workspaces(&mut self) -> anyhow::Result<Vec<AerospaceWorkspace>> {
+        let fields = format_aerospace(&["workspace", "workspace-root-container-layout"]);
+        self.query_command(
+            &AerospaceCommand::ListWorkspaces,
+            &["--all", "--format", &fields],
+        )
+        .context("Failed to execute list-workspaces.")
     }
 
-    fn list_windows(&self) -> anyhow::Result<Vec<AerospaceWindow>> {
-        todo!("Not implemented");
+    fn list_windows(&mut self) -> anyhow::Result<Vec<AerospaceWindow>> {
+        let fields = format_aerospace(&[
+            "window-id",
+            "window-title",
+            "app-name",
+            "app-bundle-id",
+            "workspace",
+        ]);
+
+        self.query_command::<Vec<AerospaceWindow>>(
+            &AerospaceCommand::ListWindows,
+            &["--all", "--format", &fields],
+        )
+        .context("Failed to execute list-windows.")
     }
 
     fn move_node_to_workspace(
-        &self,
-        _workspace: &AerospaceWorkspaceId,
-        _window_id: AerospaceWindowId,
+        &mut self,
+        workspace: &AerospaceWorkspaceId,
+        window_id: AerospaceWindowId,
     ) -> anyhow::Result<()> {
-        todo!("Not implemented");
+        let win_id_arg = format!("{}", window_id);
+
+        self.execute_command(
+            &AerospaceCommand::MoveNodeToWorkspace,
+            &["--window-id", &win_id_arg, "--", workspace],
+        )
+        .context("Failed to execute move_node_to_workspace.")?;
+
+        Ok(())
     }
 
     fn layout(
-        &self,
-        _workspace: &AerospaceWorkspaceId,
-        _layout: &AerospaceLayout,
+        &mut self,
+        workspace: &AerospaceWorkspaceId,
+        layout: &AerospaceLayout,
     ) -> anyhow::Result<()> {
-        todo!("Not implemented");
+        let layout_str = layout.to_string();
+
+        self.execute_command(
+            &AerospaceCommand::ChangeLayout,
+            &["--workspace", workspace, "--root", &layout_str],
+        )
+        .context("Failed to execute 'layout'.")?;
+
+        Ok(())
     }
 
-    fn flatten_workspace_tree(&self, _workspace: &AerospaceWorkspaceId) -> anyhow::Result<()> {
-        todo!("Not implemented");
+    fn flatten_workspace_tree(&mut self, workspace: &AerospaceWorkspaceId) -> anyhow::Result<()> {
+        self.execute_command(
+            &AerospaceCommand::FlattenWorkspaceTree,
+            &["--workspace", workspace],
+        )
+        .context("Failed to execute flatten_workspace_tree.")?;
+
+        Ok(())
     }
 }
 

@@ -6,15 +6,15 @@ use crate::aerospace::Aerospace;
 use crate::stage::{Stage, StageWindow, StageWorkspace};
 
 pub struct StageCapturer<'a> {
-    pub aerospace: &'a Aerospace,
+    pub aerospace: &'a mut Aerospace,
 }
 
 impl<'a> StageCapturer<'a> {
-    pub fn new(aerospace: &'a Aerospace) -> Self {
+    pub fn new(aerospace: &'a mut Aerospace) -> Self {
         StageCapturer { aerospace }
     }
 
-    fn captured_windows_by_workspace(&self) -> Result<HashMap<String, Vec<StageWindow>>> {
+    fn captured_windows_by_workspace(&mut self) -> Result<HashMap<String, Vec<StageWindow>>> {
         let windows = self
             .aerospace
             .list_windows()
@@ -36,7 +36,7 @@ impl<'a> StageCapturer<'a> {
     }
 
     pub fn capture(
-        &self,
+        &mut self,
         name: Option<&str>,
         target_workspaces: Option<&[&str]>,
         default_workspace: Option<&str>,

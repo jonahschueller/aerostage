@@ -24,7 +24,7 @@ enum RestoreAction {
 }
 
 impl RestoreAction {
-    fn execute(&self, aerospace: &Aerospace) -> Result<()> {
+    fn execute(&self, aerospace: &mut Aerospace) -> Result<()> {
         match self {
             Self::MoveToWorkspace {
                 workspace,
@@ -119,7 +119,7 @@ impl RestorePlan {
         RestorePlan { plan: actions }
     }
 
-    fn restore(&self, aerospace: &Aerospace) -> Result<()> {
+    fn restore(&self, aerospace: &mut Aerospace) -> Result<()> {
         for action in &self.plan {
             action.execute(aerospace)?;
         }
@@ -128,7 +128,7 @@ impl RestorePlan {
     }
 }
 
-pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
+pub fn restore_stage(aerospace: &mut Aerospace, stage: &Stage) -> Result<()> {
     let live_windows = aerospace.list_windows()?;
 
     let resolution = WindowResolution::resolve(stage, &live_windows);

@@ -1,16 +1,16 @@
 use std::fmt::Display;
 use std::process::Command;
 
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{anyhow, ensure, Context, Result};
 use serde::de::DeserializeOwned;
 
 use crate::aerospace::{
+    backend::{
+        common::{format_aerospace, AerospaceCommand},
+        AerospaceBackend,
+    },
     AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
     AerospaceWorkspaceId,
-    backend::{
-        AerospaceBackend,
-        common::{AerospaceCommand, format_aerospace},
-    },
 };
 
 pub trait CommandExecutor {
@@ -74,7 +74,7 @@ impl<E: CommandExecutor> AerospaceCliCBackend<E> {
 }
 
 impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
-    fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
+    fn list_apps(&mut self) -> Result<Vec<AerospaceApp>> {
         let fields = format_aerospace(&["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
             &AerospaceCommand::ListApps,
@@ -83,7 +83,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
         .with_context(|| "Failed to execute list-apps.")
     }
 
-    fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
+    fn list_workspaces(&mut self) -> Result<Vec<AerospaceWorkspace>> {
         let fields = format_aerospace(&["workspace", "workspace-root-container-layout"]);
         self.query_aerospace(
             &AerospaceCommand::ListWorkspaces,
@@ -101,7 +101,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
     //     .with_context(|| "Failed to execute list-monitors.")
     // }
 
-    fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
+    fn list_windows(&mut self) -> Result<Vec<AerospaceWindow>> {
         let fields = format_aerospace(&[
             "window-id",
             "window-title",
@@ -118,7 +118,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
     }
 
     fn move_node_to_workspace(
-        &self,
+        &mut self,
         workspace: &AerospaceWorkspaceId,
         window_id: AerospaceWindowId,
     ) -> Result<()> {
@@ -133,7 +133,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
         Ok(())
     }
 
-    fn layout(&self, workspace: &AerospaceWorkspaceId, layout: &AerospaceLayout) -> Result<()> {
+    fn layout(&mut self, workspace: &AerospaceWorkspaceId, layout: &AerospaceLayout) -> Result<()> {
         let layout_str = layout.to_string();
 
         self.execute_aerospace(
@@ -145,7 +145,7 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
         Ok(())
     }
 
-    fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
+    fn flatten_workspace_tree(&mut self, workspace: &AerospaceWorkspaceId) -> Result<()> {
         self.execute_aerospace(
             &AerospaceCommand::FlattenWorkspaceTree,
             &["--workspace", workspace],
@@ -202,7 +202,7 @@ mod tests {
             ]"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let mut backend = AerospaceCliCBackend::new(executor);
 
         let apps = backend.list_apps().expect("Should parse listed apps.");
 
@@ -219,7 +219,7 @@ mod tests {
         let executor =
             MockAerospaceCommandExecutor::with_failure(r#"Failed to execute aerospace."#);
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let mut backend = AerospaceCliCBackend::new(executor);
 
         let apps = backend.list_apps();
 
@@ -239,7 +239,7 @@ mod tests {
             ]"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let mut backend = AerospaceCliCBackend::new(executor);
 
         let windows = backend
             .list_windows()
@@ -261,7 +261,7 @@ mod tests {
             r#"ERROR: Failed to parse <output-format>. Unbalanced curly braces"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let mut backend = AerospaceCliCBackend::new(executor);
 
         let windows = backend.list_windows();
 
@@ -278,7 +278,7 @@ mod tests {
             }]"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let mut backend = AerospaceCliCBackend::new(executor);
         let windows = backend
             .list_windows()
             .expect("Should parse listed windows.");
