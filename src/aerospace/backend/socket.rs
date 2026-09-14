@@ -158,6 +158,33 @@ impl AerospaceSocketBackend<OpenSocketState> {
 
         serde_json::from_str(&result).map_err(AerospaceBackendError::Deserialize)
     }
+
+    fn execute_command(
+        &mut self,
+        command: &AerospaceCommand,
+        args: &[&str],
+    ) -> Result<AerospaceServerResponse> {
+        self.write_command(command, args)?;
+        let response = self.read_response()?;
+
+        if response.exit_code != 0 {
+            return Err(AerospaceBackendError::CommandFailed {
+                command: command.to_string(),
+                exit_code: response.exit_code,
+                stderr: response.stderr,
+            });
+        }
+
+        Ok(response)
+    }
+
+    fn query_command<T>(&mut self, command: &AerospaceCommand, args: &[&str]) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        let response = self.execute_command(command, args)?;
+
+        serde_json::from_str(&response.stdout).map_err(AerospaceBackendError::Deserialize)
     }
 }
 
