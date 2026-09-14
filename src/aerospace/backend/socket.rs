@@ -5,13 +5,16 @@ use std::{
     os::unix::net::UnixStream,
 };
 
-use anyhow::{Ok, Result, ensure};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::aerospace::{
     AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
     AerospaceWorkspaceId,
-    backend::{AerospaceBackend, common::AerospaceCommand},
+    backend::{
+        AerospaceBackend,
+        common::AerospaceCommand,
+        error::{AerospaceBackendError, Result},
+    },
 };
 
 fn get_aerospace_socket_path() -> Result<String> {
@@ -60,7 +63,12 @@ pub struct AerospaceSocketBackend<State = OpenSocketState> {
 
 impl AerospaceSocketBackend<ConnectingSocketState> {
     pub fn new(path: &str) -> Result<Self> {
-        let socket = UnixStream::connect(path)?;
+        let socket = UnixStream::connect(path).map_err(|source| {
+            AerospaceBackendError::UnavailableAerospace {
+                path: path.to_owned(),
+                source,
+            }
+        })?;
 
         Ok(Self {
             socket,
@@ -85,12 +93,12 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
 
         let server_version = u32::from_le_bytes(server_version_buf);
 
-        ensure!(
-            server_version == SOCKET_PROTOCOL_VERSION,
-            "Aerospace server returned different protocol version (client: {}, server: {})",
-            &SOCKET_PROTOCOL_VERSION,
-            &server_version
-        );
+        if server_version != SOCKET_PROTOCOL_VERSION {
+            return Err(AerospaceBackendError::IncompatibleVersion {
+                client_version: SOCKET_PROTOCOL_VERSION,
+                server_version,
+            });
+        }
 
         Ok(AerospaceSocketBackend {
             socket: self.socket,
@@ -115,7 +123,7 @@ impl AerospaceSocketBackend<OpenSocketState> {
     }
 
     fn write_client_request(&mut self, payload: &AerospaceClientRequest) -> Result<()> {
-        let payload = serde_json::to_string(payload)?;
+        let payload = serde_json::to_string(payload).map_err(AerospaceBackendError::Serialize)?;
         self.write(&payload)
     }
 
@@ -148,36 +156,41 @@ impl AerospaceSocketBackend<OpenSocketState> {
     fn read_response(&mut self) -> Result<AerospaceServerResponse> {
         let result = self.read_str()?;
 
-        Ok(serde_json::from_str(&result)?)
+        serde_json::from_str(&result).map_err(AerospaceBackendError::Deserialize)
+    }
     }
 }
 
 impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
-    fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
+    fn list_apps(&self) -> anyhow::Result<Vec<AerospaceApp>> {
         todo!("Not implemented");
     }
 
-    fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
+    fn list_workspaces(&self) -> anyhow::Result<Vec<AerospaceWorkspace>> {
         todo!("Not implemented");
     }
 
-    fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
+    fn list_windows(&self) -> anyhow::Result<Vec<AerospaceWindow>> {
         todo!("Not implemented");
     }
 
     fn move_node_to_workspace(
         &self,
-        workspace: &AerospaceWorkspaceId,
-        window_id: AerospaceWindowId,
-    ) -> Result<()> {
+        _workspace: &AerospaceWorkspaceId,
+        _window_id: AerospaceWindowId,
+    ) -> anyhow::Result<()> {
         todo!("Not implemented");
     }
 
-    fn layout(&self, workspace: &AerospaceWorkspaceId, layout: &AerospaceLayout) -> Result<()> {
+    fn layout(
+        &self,
+        _workspace: &AerospaceWorkspaceId,
+        _layout: &AerospaceLayout,
+    ) -> anyhow::Result<()> {
         todo!("Not implemented");
     }
 
-    fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
+    fn flatten_workspace_tree(&self, _workspace: &AerospaceWorkspaceId) -> anyhow::Result<()> {
         todo!("Not implemented");
     }
 }
