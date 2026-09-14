@@ -1,20 +1,24 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use crate::aerospace::{
-    backend::{AerospaceBackend, AerospaceCliCBackend},
     AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
     AerospaceWorkspaceId,
+    backend::{AerospaceBackend, AerospaceCliBackend, AerospaceSocketBackend},
 };
 
-pub struct Aerospace<B: AerospaceBackend = AerospaceCliCBackend> {
-    backend: B,
+pub struct Aerospace {
+    backend: Box<dyn AerospaceBackend>,
 }
 
 impl Default for Aerospace {
     fn default() -> Self {
-        Self {
-            backend: AerospaceCliCBackend::default(),
-        }
+        let backend: Box<dyn AerospaceBackend> =
+            match AerospaceSocketBackend::with_aerospace_socket().and_then(|be| be.do_handshake()) {
+                Ok(socket) => Box::new(socket),
+                Err(_) => Box::new(AerospaceCliBackend::default()),
+            };
+
+        Self { backend }
     }
 }
 

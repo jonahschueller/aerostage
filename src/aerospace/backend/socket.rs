@@ -58,7 +58,7 @@ struct AerospaceServerResponse {
 pub struct ConnectingSocketState;
 pub struct OpenSocketState;
 
-pub struct AerospaceSocketBackend<State = OpenSocketState> {
+pub struct AerospaceSocketBackend<State> {
     socket: RefCell<UnixStream>,
     _state: std::marker::PhantomData<State>,
 }
@@ -273,7 +273,9 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aerospace::backend::{AerospaceSocketBackend, common::AerospaceCommand};
+    use crate::aerospace::backend::{
+        AerospaceBackend, AerospaceSocketBackend, common::AerospaceCommand,
+    };
 
     #[test]
     fn test_aerospace_handshake() {
@@ -282,13 +284,9 @@ mod tests {
 
         let conn_backend = backend.do_handshake().expect("Failed to perform handshake");
 
-        let result =
-            conn_backend.write_command(&AerospaceCommand::ListWorkspaces, &["--all", "--json"]);
-
-        let response = conn_backend
-            .read_response()
-            .expect("Failed to obtain response");
-
-        dbg!(&response);
+        let result = conn_backend
+            .list_workspaces()
+            .expect("Failed to list workspaces");
+        dbg!(&result);
     }
 }

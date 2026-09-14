@@ -1,16 +1,15 @@
-use std::fmt::Display;
 use std::process::Command;
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, ensure};
 use serde::de::DeserializeOwned;
 
 use crate::aerospace::{
-    backend::{
-        common::{format_aerospace, AerospaceCommand},
-        AerospaceBackend,
-    },
     AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
     AerospaceWorkspaceId,
+    backend::{
+        AerospaceBackend,
+        common::{AerospaceCommand, format_aerospace},
+    },
 };
 
 pub trait CommandExecutor {
@@ -37,11 +36,11 @@ impl CommandExecutor for AerospaceCommandExecutor {
     }
 }
 
-pub struct AerospaceCliCBackend<E: CommandExecutor = AerospaceCommandExecutor> {
+pub struct AerospaceCliBackend<E: CommandExecutor = AerospaceCommandExecutor> {
     executor: E,
 }
 
-impl Default for AerospaceCliCBackend {
+impl Default for AerospaceCliBackend {
     fn default() -> Self {
         Self {
             executor: AerospaceCommandExecutor {},
@@ -49,7 +48,7 @@ impl Default for AerospaceCliCBackend {
     }
 }
 
-impl<E: CommandExecutor> AerospaceCliCBackend<E> {
+impl<E: CommandExecutor> AerospaceCliBackend<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
     }
@@ -73,7 +72,7 @@ impl<E: CommandExecutor> AerospaceCliCBackend<E> {
     }
 }
 
-impl<E: CommandExecutor> AerospaceBackend for AerospaceCliCBackend<E> {
+impl<E: CommandExecutor> AerospaceBackend for AerospaceCliBackend<E> {
     fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
         let fields = format_aerospace(&["app-bundle-id", "app-name", "app-pid"]);
         self.query_aerospace::<Vec<AerospaceApp>>(
@@ -202,7 +201,7 @@ mod tests {
             ]"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let backend = AerospaceCliBackend::new(executor);
 
         let apps = backend.list_apps().expect("Should parse listed apps.");
 
@@ -219,7 +218,7 @@ mod tests {
         let executor =
             MockAerospaceCommandExecutor::with_failure(r#"Failed to execute aerospace."#);
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let backend = AerospaceCliBackend::new(executor);
 
         let apps = backend.list_apps();
 
@@ -239,7 +238,7 @@ mod tests {
             ]"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let backend = AerospaceCliBackend::new(executor);
 
         let windows = backend
             .list_windows()
@@ -261,7 +260,7 @@ mod tests {
             r#"ERROR: Failed to parse <output-format>. Unbalanced curly braces"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let backend = AerospaceCliBackend::new(executor);
 
         let windows = backend.list_windows();
 
@@ -278,7 +277,7 @@ mod tests {
             }]"#,
         );
 
-        let backend = AerospaceCliCBackend::new(executor);
+        let backend = AerospaceCliBackend::new(executor);
         let windows = backend
             .list_windows()
             .expect("Should parse listed windows.");
