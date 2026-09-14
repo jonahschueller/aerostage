@@ -31,7 +31,7 @@ struct AerospaceClientRequest {
     args: Vec<String>,
     stdin: String,
     window_id: Option<u32>,
-    workspace: Option<u32>,
+    workspace: Option<String>,
 }
 
 impl AerospaceClientRequest {
@@ -273,9 +273,28 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aerospace::backend::{
-        AerospaceBackend, AerospaceSocketBackend, common::AerospaceCommand,
-    };
+    use super::AerospaceClientRequest;
+    use crate::aerospace::backend::{AerospaceBackend, AerospaceSocketBackend};
+
+    #[test]
+    fn client_request_serializes_workspace_as_string_or_null() {
+        let request = AerospaceClientRequest::new(vec!["list-workspaces".into()]);
+        let json = serde_json::to_value(&request).expect("request should serialize");
+
+        assert_eq!(json["workspace"], serde_json::Value::Null);
+        assert_eq!(json["windowId"], serde_json::Value::Null);
+
+        let request = AerospaceClientRequest {
+            args: vec!["layout".into()],
+            stdin: String::new(),
+            window_id: Some(42),
+            workspace: Some("main".into()),
+        };
+        let json = serde_json::to_value(&request).expect("request should serialize");
+
+        assert_eq!(json["workspace"], "main");
+        assert_eq!(json["windowId"], 42);
+    }
 
     #[test]
     fn test_aerospace_handshake() {
