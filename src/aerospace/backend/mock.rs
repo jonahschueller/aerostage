@@ -14,34 +14,30 @@ impl MockAerospaceBackend {
 }
 
 impl AerospaceBackend for MockAerospaceBackend {
-    fn list_apps(&mut self) -> Result<Vec<AerospaceApp>> {
+    fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
         Ok(vec![])
     }
-    fn list_workspaces(&mut self) -> Result<Vec<AerospaceWorkspace>> {
+    fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
         Ok(vec![])
     }
 
-    fn list_windows(&mut self) -> Result<Vec<AerospaceWindow>> {
+    fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
         Ok(vec![])
     }
 
     fn move_node_to_workspace(
-        &mut self,
+        &self,
         _workspace: &AerospaceWorkspaceId,
         _window_id: AerospaceWindowId,
     ) -> Result<()> {
         Ok(())
     }
 
-    fn layout(
-        &mut self,
-        _workspace: &AerospaceWorkspaceId,
-        _layout: &AerospaceLayout,
-    ) -> Result<()> {
+    fn layout(&self, _workspace: &AerospaceWorkspaceId, _layout: &AerospaceLayout) -> Result<()> {
         Ok(())
     }
 
-    fn flatten_workspace_tree(&mut self, _workspace: &AerospaceWorkspaceId) -> Result<()> {
+    fn flatten_workspace_tree(&self, _workspace: &AerospaceWorkspaceId) -> Result<()> {
         Ok(())
     }
 }

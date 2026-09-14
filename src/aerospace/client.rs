@@ -27,20 +27,20 @@ impl Aerospace {
         })
     }
 
-    pub fn list_apps(&mut self) -> Result<Vec<AerospaceApp>> {
+    pub fn list_apps(&self) -> Result<Vec<AerospaceApp>> {
         self.backend.list_apps()
     }
 
-    pub fn list_workspaces(&mut self) -> Result<Vec<AerospaceWorkspace>> {
+    pub fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>> {
         self.backend.list_workspaces()
     }
 
-    pub fn list_windows(&mut self) -> Result<Vec<AerospaceWindow>> {
+    pub fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
         self.backend.list_windows()
     }
 
     pub fn move_node_to_workspace(
-        &mut self,
+        &self,
         workspace: &AerospaceWorkspaceId,
         window_id: AerospaceWindowId,
     ) -> Result<()> {
@@ -48,14 +48,14 @@ impl Aerospace {
     }
 
     pub fn change_layout(
-        &mut self,
+        &self,
         workspace: &AerospaceWorkspaceId,
         layout: &AerospaceLayout,
     ) -> Result<()> {
         self.backend.layout(workspace, layout)
     }
 
-    pub fn flatten_workspace_tree(&mut self, workspace: &AerospaceWorkspaceId) -> Result<()> {
+    pub fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
         self.backend.flatten_workspace_tree(workspace)
     }
 }

@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     env,
     io::{Read, Write},
     marker::PhantomData,
@@ -58,7 +59,7 @@ pub struct ConnectingSocketState;
 pub struct OpenSocketState;
 
 pub struct AerospaceSocketBackend<State = OpenSocketState> {
-    socket: UnixStream,
+    socket: RefCell<UnixStream>,
     _state: std::marker::PhantomData<State>,
 }
 
@@ -72,7 +73,7 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
         })?;
 
         Ok(Self {
-            socket,
+            socket: RefCell::new(socket),
             _state: PhantomData,
         })
     }
@@ -83,22 +84,24 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
         AerospaceSocketBackend::new(&socket_path)
     }
 
-    pub fn do_handshake(mut self) -> Result<AerospaceSocketBackend<OpenSocketState>> {
+    pub fn do_handshake(self) -> Result<AerospaceSocketBackend<OpenSocketState>> {
         const SOCKET_PROTOCOL_VERSION: u32 = 1;
 
-        self.socket
-            .write_all(&SOCKET_PROTOCOL_VERSION.to_le_bytes())?;
+        {
+            let mut socket = self.socket.borrow_mut();
+            socket.write_all(&SOCKET_PROTOCOL_VERSION.to_le_bytes())?;
 
-        let mut server_version_buf = [0u8; 4];
-        self.socket.read_exact(&mut server_version_buf)?;
+            let mut server_version_buf = [0u8; 4];
+            socket.read_exact(&mut server_version_buf)?;
 
-        let server_version = u32::from_le_bytes(server_version_buf);
+            let server_version = u32::from_le_bytes(server_version_buf);
 
-        if server_version != SOCKET_PROTOCOL_VERSION {
-            return Err(AerospaceBackendError::IncompatibleVersion {
-                client_version: SOCKET_PROTOCOL_VERSION,
-                server_version,
-            });
+            if server_version != SOCKET_PROTOCOL_VERSION {
+                return Err(AerospaceBackendError::IncompatibleVersion {
+                    client_version: SOCKET_PROTOCOL_VERSION,
+                    server_version,
+                });
+            }
         }
 
         Ok(AerospaceSocketBackend {
@@ -109,26 +112,26 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
 }
 
 impl AerospaceSocketBackend<OpenSocketState> {
-    fn write_raw(&mut self, payload: &[u8]) -> Result<()> {
+    fn write_raw(&self, payload: &[u8]) -> Result<()> {
+        let mut socket = self.socket.borrow_mut();
         let len = payload.len() as u32;
 
-        let len_buf = len.to_le_bytes();
-        self.socket.write_all(&len_buf)?;
-        self.socket.write_all(payload)?;
+        socket.write_all(&len.to_le_bytes())?;
+        socket.write_all(payload)?;
 
         Ok(())
     }
 
-    fn write(&mut self, payload: &str) -> Result<()> {
+    fn write(&self, payload: &str) -> Result<()> {
         self.write_raw(payload.as_bytes())
     }
 
-    fn write_client_request(&mut self, payload: &AerospaceClientRequest) -> Result<()> {
+    fn write_client_request(&self, payload: &AerospaceClientRequest) -> Result<()> {
         let payload = serde_json::to_string(payload).map_err(AerospaceBackendError::Serialize)?;
         self.write(&payload)
     }
 
-    fn write_command(&mut self, command: &AerospaceCommand, args: &[&str]) -> Result<()> {
+    fn write_command(&self, command: &AerospaceCommand, args: &[&str]) -> Result<()> {
         let full_args: Vec<String> = std::iter::once(command.to_string())
             .chain(args.iter().copied().map(str::to_string))
             .collect();
@@ -138,30 +141,31 @@ impl AerospaceSocketBackend<OpenSocketState> {
         self.write_client_request(&request)
     }
 
-    fn read(&mut self) -> Result<Vec<u8>> {
+    fn read(&self) -> Result<Vec<u8>> {
+        let mut socket = self.socket.borrow_mut();
         let mut len_buf = [0u8; 4];
-        self.socket.read_exact(&mut len_buf)?;
+        socket.read_exact(&mut len_buf)?;
 
         let mut payload_buf = vec![0u8; u32::from_le_bytes(len_buf) as usize];
-        self.socket.read_exact(&mut payload_buf)?;
+        socket.read_exact(&mut payload_buf)?;
 
         Ok(payload_buf)
     }
 
-    fn read_str(&mut self) -> Result<String> {
+    fn read_str(&self) -> Result<String> {
         let result = self.read()?;
 
         Ok(String::from_utf8(result)?)
     }
 
-    fn read_response(&mut self) -> Result<AerospaceServerResponse> {
+    fn read_response(&self) -> Result<AerospaceServerResponse> {
         let result = self.read_str()?;
 
         serde_json::from_str(&result).map_err(AerospaceBackendError::Deserialize)
     }
 
     fn execute_command(
-        &mut self,
+        &self,
         command: &AerospaceCommand,
         args: &[&str],
     ) -> Result<AerospaceServerResponse> {
@@ -179,7 +183,7 @@ impl AerospaceSocketBackend<OpenSocketState> {
         Ok(response)
     }
 
-    fn query_command<T>(&mut self, command: &AerospaceCommand, args: &[&str]) -> Result<T>
+    fn query_command<T>(&self, command: &AerospaceCommand, args: &[&str]) -> Result<T>
     where
         T: DeserializeOwned,
     {
@@ -193,13 +197,13 @@ impl AerospaceSocketBackend<OpenSocketState> {
 }
 
 impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
-    fn list_apps(&mut self) -> anyhow::Result<Vec<AerospaceApp>> {
+    fn list_apps(&self) -> anyhow::Result<Vec<AerospaceApp>> {
         let fields = format_aerospace(&["app-bundle-id", "app-name", "app-pid"]);
         self.query_command::<Vec<AerospaceApp>>(&AerospaceCommand::ListApps, &["--format", &fields])
             .context("Failed to execute list-apps.")
     }
 
-    fn list_workspaces(&mut self) -> anyhow::Result<Vec<AerospaceWorkspace>> {
+    fn list_workspaces(&self) -> anyhow::Result<Vec<AerospaceWorkspace>> {
         let fields = format_aerospace(&["workspace", "workspace-root-container-layout"]);
         self.query_command(
             &AerospaceCommand::ListWorkspaces,
@@ -208,7 +212,7 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
         .context("Failed to execute list-workspaces.")
     }
 
-    fn list_windows(&mut self) -> anyhow::Result<Vec<AerospaceWindow>> {
+    fn list_windows(&self) -> anyhow::Result<Vec<AerospaceWindow>> {
         let fields = format_aerospace(&[
             "window-id",
             "window-title",
@@ -225,7 +229,7 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
     }
 
     fn move_node_to_workspace(
-        &mut self,
+        &self,
         workspace: &AerospaceWorkspaceId,
         window_id: AerospaceWindowId,
     ) -> anyhow::Result<()> {
@@ -241,7 +245,7 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
     }
 
     fn layout(
-        &mut self,
+        &self,
         workspace: &AerospaceWorkspaceId,
         layout: &AerospaceLayout,
     ) -> anyhow::Result<()> {
@@ -256,7 +260,7 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
         Ok(())
     }
 
-    fn flatten_workspace_tree(&mut self, workspace: &AerospaceWorkspaceId) -> anyhow::Result<()> {
+    fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> anyhow::Result<()> {
         self.execute_command(
             &AerospaceCommand::FlattenWorkspaceTree,
             &["--workspace", workspace],
@@ -276,7 +280,7 @@ mod tests {
         let backend = AerospaceSocketBackend::with_aerospace_socket()
             .expect("Failed to create Aerospace socket backend.");
 
-        let mut conn_backend = backend.do_handshake().expect("Failed to perform handshake");
+        let conn_backend = backend.do_handshake().expect("Failed to perform handshake");
 
         let result =
             conn_backend.write_command(&AerospaceCommand::ListWorkspaces, &["--all", "--json"]);
