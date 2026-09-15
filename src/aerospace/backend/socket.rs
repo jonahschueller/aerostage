@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     env,
     io::{Read, Write},
     marker::PhantomData,
@@ -59,7 +58,7 @@ pub struct ConnectingSocketState;
 pub struct OpenSocketState;
 
 pub struct AerospaceSocketBackend<State> {
-    socket: RefCell<UnixStream>,
+    socket: UnixStream,
     _state: std::marker::PhantomData<State>,
 }
 
@@ -73,7 +72,7 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
         })?;
 
         Ok(Self {
-            socket: RefCell::new(socket),
+            socket,
             _state: PhantomData,
         })
     }
@@ -84,11 +83,19 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
         AerospaceSocketBackend::new(&socket_path)
     }
 
+    #[cfg(test)]
+    fn from_stream(socket: UnixStream) -> Self {
+        Self {
+            socket,
+            _state: PhantomData,
+        }
+    }
+
     pub fn do_handshake(self) -> Result<AerospaceSocketBackend<OpenSocketState>> {
         const SOCKET_PROTOCOL_VERSION: u32 = 1;
 
         {
-            let mut socket = self.socket.borrow_mut();
+            let mut socket = &self.socket;
             socket.write_all(&SOCKET_PROTOCOL_VERSION.to_le_bytes())?;
 
             let mut server_version_buf = [0u8; 4];
@@ -113,7 +120,7 @@ impl AerospaceSocketBackend<ConnectingSocketState> {
 
 impl AerospaceSocketBackend<OpenSocketState> {
     fn write_raw(&self, payload: &[u8]) -> Result<()> {
-        let mut socket = self.socket.borrow_mut();
+        let mut socket = &self.socket;
         let len = payload.len() as u32;
 
         socket.write_all(&len.to_le_bytes())?;
@@ -142,7 +149,7 @@ impl AerospaceSocketBackend<OpenSocketState> {
     }
 
     fn read(&self) -> Result<Vec<u8>> {
-        let mut socket = self.socket.borrow_mut();
+        let mut socket = &self.socket;
         let mut len_buf = [0u8; 4];
         socket.read_exact(&mut len_buf)?;
 
@@ -273,8 +280,119 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
 
 #[cfg(test)]
 mod tests {
-    use super::AerospaceClientRequest;
-    use crate::aerospace::backend::{AerospaceBackend, AerospaceSocketBackend};
+    use super::*;
+    use crate::aerospace::{AerospaceLayout, backend::AerospaceBackend};
+    use serde_json::json;
+    use std::{
+        io::{Read, Write},
+        os::unix::net::UnixStream,
+        sync::mpsc,
+        thread::{self, JoinHandle},
+    };
+
+    const PROTOCOL_VERSION: u32 = 1;
+
+    struct FakeAerospacePeer {
+        stream: UnixStream,
+    }
+
+    impl FakeAerospacePeer {
+        fn handshake(&mut self, server_version: u32) {
+            let mut client_version = [0u8; 4];
+            self.stream
+                .read_exact(&mut client_version)
+                .expect("peer should read handshake version");
+            assert_eq!(u32::from_le_bytes(client_version), PROTOCOL_VERSION);
+
+            self.stream
+                .write_all(&server_version.to_le_bytes())
+                .expect("peer should write handshake version");
+        }
+
+        fn read_request(&mut self) -> serde_json::Value {
+            let mut len_buf = [0u8; 4];
+            self.stream
+                .read_exact(&mut len_buf)
+                .expect("peer should read request length");
+
+            let mut payload = vec![0u8; u32::from_le_bytes(len_buf) as usize];
+            self.stream
+                .read_exact(&mut payload)
+                .expect("peer should read request payload");
+
+            serde_json::from_slice(&payload).expect("request should be JSON")
+        }
+
+        fn write_payload(&mut self, payload: &[u8]) {
+            let len = payload.len() as u32;
+            self.stream
+                .write_all(&len.to_le_bytes())
+                .expect("peer should write payload length");
+            self.stream
+                .write_all(payload)
+                .expect("peer should write payload");
+        }
+
+        fn write_response(&mut self, body: serde_json::Value) {
+            self.write_payload(body.to_string().as_bytes());
+        }
+
+        fn write_success(&mut self, stdout: &str) {
+            self.write_response(json!({
+                "exitCode": 0,
+                "stdout": stdout,
+                "stderr": "",
+                "serverVersionAndHash": "test-0"
+            }));
+        }
+
+        fn write_failure(&mut self, exit_code: i32, stderr: &str) {
+            self.write_response(json!({
+                "exitCode": exit_code,
+                "stdout": "",
+                "stderr": stderr,
+                "serverVersionAndHash": "test-0"
+            }));
+        }
+    }
+
+    fn spawn_peer(
+        handler: impl FnOnce(&mut FakeAerospacePeer) + Send + 'static,
+    ) -> (
+        AerospaceSocketBackend<ConnectingSocketState>,
+        JoinHandle<()>,
+    ) {
+        let (client, server) =
+            UnixStream::pair().expect("should create connected unix stream pair");
+        let handle = thread::spawn(move || {
+            let mut peer = FakeAerospacePeer { stream: server };
+            handler(&mut peer);
+        });
+
+        (AerospaceSocketBackend::from_stream(client), handle)
+    }
+
+    fn connect_handshaken(
+        handler: impl FnOnce(&mut FakeAerospacePeer) + Send + 'static,
+    ) -> (AerospaceSocketBackend<OpenSocketState>, JoinHandle<()>) {
+        let (backend, handle) = spawn_peer(move |peer| {
+            peer.handshake(PROTOCOL_VERSION);
+            handler(peer);
+        });
+        let backend = backend
+            .do_handshake()
+            .expect("handshake with matching version should succeed");
+        (backend, handle)
+    }
+
+    fn request_args(request: &serde_json::Value) -> Vec<String> {
+        request["args"]
+            .as_array()
+            .expect("request should include args")
+            .iter()
+            .map(|value| value.as_str().expect("arg should be a string").to_string())
+            .collect()
+    }
 
     #[test]
     fn client_request_serializes_workspace_as_string_or_null() {
@@ -297,15 +415,255 @@ mod tests {
     }
 
     #[test]
-    fn test_aerospace_handshake() {
-        let backend = AerospaceSocketBackend::with_aerospace_socket()
-            .expect("Failed to create Aerospace socket backend.");
+    fn new_reports_unavailable_aerospace_for_missing_socket() {
+        let Err(error) = AerospaceSocketBackend::new("/tmp/aerostage-missing-aerospace.sock")
+        else {
+            panic!("connecting to a missing socket should fail");
+        };
 
-        let conn_backend = backend.do_handshake().expect("Failed to perform handshake");
+        match error {
+            AerospaceBackendError::UnavailableAerospace { path, .. } => {
+                assert_eq!(path, "/tmp/aerostage-missing-aerospace.sock");
+            }
+            other => panic!("expected UnavailableAerospace, got {other:?}"),
+        }
+    }
 
-        let result = conn_backend
+    #[test]
+    fn handshake_succeeds_when_protocol_versions_match() {
+        let (backend, handle) = spawn_peer(|peer| peer.handshake(PROTOCOL_VERSION));
+
+        backend
+            .do_handshake()
+            .expect("matching protocol versions should handshake");
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn handshake_fails_on_incompatible_server_version() {
+        let (backend, handle) = spawn_peer(|peer| peer.handshake(99));
+
+        let Err(error) = backend.do_handshake() else {
+            panic!("mismatched protocol versions should fail");
+        };
+        match error {
+            AerospaceBackendError::IncompatibleVersion {
+                client_version,
+                server_version,
+            } => {
+                assert_eq!(client_version, PROTOCOL_VERSION);
+                assert_eq!(server_version, 99);
+            }
+            other => panic!("expected IncompatibleVersion, got {other:?}"),
+        }
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn list_apps_sends_json_query_and_parses_stdout() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success(
+                r#"[{
+                    "app-name": "TestApp",
+                    "app-bundle-id": "com.test.app",
+                    "app-pid": 42
+                }]"#,
+            );
+        });
+
+        let apps = backend.list_apps().expect("should parse listed apps");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            [
+                "list-apps",
+                "--json",
+                "--format",
+                "%{app-bundle-id} %{app-name} %{app-pid}"
+            ]
+        );
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].app_name, "TestApp");
+        assert_eq!(apps[0].app_bundle_id, "com.test.app");
+        assert_eq!(apps[0].app_pid, 42);
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn list_workspaces_sends_all_and_format_flags() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success(
+                r#"[{
+                    "workspace": "1",
+                    "workspace-root-container-layout": "h_tiles"
+                }]"#,
+            );
+        });
+
+        let workspaces = backend
             .list_workspaces()
-            .expect("Failed to list workspaces");
-        dbg!(&result);
+            .expect("should parse listed workspaces");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            [
+                "list-workspaces",
+                "--json",
+                "--all",
+                "--format",
+                "%{workspace} %{workspace-root-container-layout}"
+            ]
+        );
+        assert_eq!(workspaces.len(), 1);
+        assert_eq!(workspaces[0].workspace, "1");
+        assert_eq!(workspaces[0].layout, AerospaceLayout::HTiles);
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn list_windows_parses_optional_fields() {
+        let (backend, handle) = connect_handshaken(|peer| {
+            let _ = peer.read_request();
+            peer.write_success(
+                r#"[{
+                    "window-id": 7,
+                    "window-title": "TestWindow",
+                    "app-name": "TestApp",
+                    "app-bundle-id": "com.example.test",
+                    "workspace": "main"
+                }]"#,
+            );
+        });
+
+        let windows = backend.list_windows().expect("should parse listed windows");
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0].window_id, 7);
+        assert_eq!(windows[0].window_title, "TestWindow");
+        assert_eq!(windows[0].app_name, "TestApp");
+        assert_eq!(windows[0].app_bundle_id, "com.example.test");
+        assert_eq!(windows[0].workspace, "main");
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn execute_command_maps_nonzero_exit_to_command_failed() {
+        let (backend, handle) = connect_handshaken(|peer| {
+            let _ = peer.read_request();
+            peer.write_failure(1, "workspace does not exist");
+        });
+
+        let error = backend
+            .flatten_workspace_tree(&"missing".to_string())
+            .expect_err("nonzero exit should fail");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("flatten-workspace-tree"),
+            "unexpected error: {message}"
+        );
+        assert!(
+            message.contains("workspace does not exist"),
+            "unexpected error: {message}"
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn query_command_fails_on_invalid_stdout_json() {
+        let (backend, handle) = connect_handshaken(|peer| {
+            let _ = peer.read_request();
+            peer.write_success("not-json");
+        });
+
+        let error = backend
+            .list_apps()
+            .expect_err("invalid stdout JSON should fail");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("Failed to execute list-apps"),
+            "unexpected error: {message}"
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn read_response_fails_on_invalid_utf8_payload() {
+        let (backend, handle) = connect_handshaken(|peer| {
+            let _ = peer.read_request();
+            peer.write_payload(&[0xff, 0xfe, 0xfd]);
+        });
+
+        let error = backend.list_apps().expect_err("invalid UTF-8 should fail");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("Failed to execute list-apps"),
+            "unexpected error: {message}"
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn move_node_to_workspace_sends_window_and_workspace_args() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success("");
+        });
+
+        backend
+            .move_node_to_workspace(&"main".to_string(), 42)
+            .expect("move should succeed");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            ["move-node-to-workspace", "--window-id", "42", "--", "main"]
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn layout_sends_workspace_and_root_layout() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success("");
+        });
+
+        backend
+            .layout(&"coding".to_string(), &AerospaceLayout::VAccordion)
+            .expect("layout should succeed");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            ["layout", "--workspace", "coding", "--root", "v_accordion"]
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn flatten_workspace_tree_sends_workspace_arg() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success("");
+        });
+
+        backend
+            .flatten_workspace_tree(&"1".to_string())
+            .expect("flatten should succeed");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            ["flatten-workspace-tree", "--workspace", "1"]
+        );
+        handle.join().expect("peer thread should finish");
     }
 }

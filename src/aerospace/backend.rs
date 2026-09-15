@@ -4,7 +4,6 @@ mod error;
 #[cfg(test)]
 pub mod mock;
 mod socket;
-mod types;
 
 use anyhow::Result;
 
@@ -15,9 +14,9 @@ use crate::aerospace::{
 
 pub use cli::*;
 pub use socket::*;
-pub use types::*;
 
 pub trait AerospaceBackend {
+    #[allow(unused)]
     fn list_apps(&self) -> Result<Vec<AerospaceApp>>;
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>>;
     fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>>;
