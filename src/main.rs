@@ -1,6 +1,7 @@
 mod aerospace;
 mod capture;
 mod cli;
+mod common;
 mod config;
 mod restore;
 mod stage;

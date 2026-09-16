@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-use crate::stage::Stage;
+use crate::{config::Config, stage::Stage};
 
 pub struct StageRepository {}
 
@@ -27,7 +27,6 @@ impl StageRepository {
         Ok(stage)
     }
 
-    #[allow(dead_code)]
     pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Stage>> {
         let dir = dir.as_ref();
 
@@ -44,6 +43,7 @@ impl StageRepository {
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                println!("Loading from file: {}", path.to_str().unwrap());
                 let stage = StageRepository::load_from_file(&path).with_context(|| {
                     format!("Failed to load stage from file '{}'.", path.display())
                 })?;
@@ -61,11 +61,7 @@ impl StageRepository {
         Ok(stages)
     }
 
-    #[allow(dead_code)]
-    pub fn load_from_config() -> Result<Vec<Stage>> {
-        let config = crate::config::Config::load(None)
-            .with_context(|| "Failed to load aerostage config.")?;
-
+    pub fn load_from_config(config: &Config) -> Result<Vec<Stage>> {
         StageRepository::load_from_dir(&config.stage_directory)
             .with_context(|| "Failed to load stages from stage directory.")
     }

@@ -4,6 +4,7 @@ use std::io::Write;
 
 use serde::{Deserialize, Serialize};
 
+pub mod commands;
 pub mod repository;
 
 #[derive(Debug, Serialize, Deserialize)]
