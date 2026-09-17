@@ -4,7 +4,7 @@ use crate::{
     aerospace::Aerospace,
     cli::CommandHandler,
     restore::restore::restore_stage,
-    stage::{Stage, repository::StageRepository},
+    stage::repository::StageRepository,
 };
 
 pub struct RestoreCommandHandler {

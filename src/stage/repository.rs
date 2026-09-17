@@ -48,8 +48,6 @@ pub enum StageRepositoryError {
         #[source]
         source: io::Error,
     },
-    #[error("no stages found in directory '{}'", path.display())]
-    NoStagesFound { path: PathBuf },
 }
 
 type Result<T> = std::result::Result<T, StageRepositoryError>;
@@ -103,6 +101,10 @@ impl StageRepository {
     pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<StageFile>> {
         let dir = dir.as_ref();
 
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+
         if !dir.is_dir() {
             return Err(StageRepositoryError::NotADirectory {
                 path: dir.to_path_buf(),
@@ -124,16 +126,17 @@ impl StageRepository {
 
             let path = entry.path();
 
-            if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-                stages.push(StageRepository::load_from_file(&path)?);
+            if path.extension().and_then(|s| s.to_str()) != Some("toml") {
+                continue;
+            }
+
+            match StageRepository::load_from_file(&path) {
+                Ok(stage) => stages.push(stage),
+                Err(err) => eprintln!("{err}"),
             }
         }
 
-        if stages.is_empty() {
-            return Err(StageRepositoryError::NoStagesFound {
-                path: dir.to_path_buf(),
-            });
-        }
+        stages.sort_by(|a, b| a.path.file_name().cmp(&b.path.file_name()));
 
         Ok(stages)
     }
@@ -195,6 +198,7 @@ name = "1"
         let stages = StageRepository::load_from_dir(&dir).unwrap();
         assert_eq!(stages.len(), 1);
         assert_eq!(stages[0].stage.name.as_deref(), Some("work"));
+        assert_eq!(stages[0].path, dir.join("work.toml"));
 
         let _ = fs::remove_dir_all(dir);
     }
@@ -213,11 +217,42 @@ name = "1"
     }
 
     #[test]
-    fn load_from_dir_rejects_empty_directories() {
+    fn load_from_dir_returns_empty_for_empty_directories() {
         let dir = temp_dir("empty-dir");
 
-        let error = StageRepository::load_from_dir(&dir).unwrap_err();
-        assert!(matches!(error, StageRepositoryError::NoStagesFound { .. }));
+        let stages = StageRepository::load_from_dir(&dir).unwrap();
+        assert!(stages.is_empty());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_from_dir_returns_empty_when_directory_is_missing() {
+        let dir = temp_dir("missing-dir");
+        fs::remove_dir_all(&dir).unwrap();
+
+        let stages = StageRepository::load_from_dir(&dir).unwrap();
+        assert!(stages.is_empty());
+    }
+
+    #[test]
+    fn load_from_dir_skips_unreadable_toml_files() {
+        let dir = temp_dir("skip-bad-toml");
+        fs::write(
+            dir.join("work.toml"),
+            r#"
+name = "work"
+
+[[workspace]]
+name = "1"
+"#,
+        )
+        .unwrap();
+        fs::write(dir.join("bad.toml"), "this is not toml [[[").unwrap();
+
+        let stages = StageRepository::load_from_dir(&dir).unwrap();
+        assert_eq!(stages.len(), 1);
+        assert_eq!(stages[0].path, dir.join("work.toml"));
 
         let _ = fs::remove_dir_all(dir);
     }

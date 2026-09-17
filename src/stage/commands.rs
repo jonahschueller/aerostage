@@ -46,11 +46,10 @@ impl CommandHandler for StageListCommandHandler {
                     ]
                 })
                 .collect();
-            let refs: Vec<_> = rows.iter().map(|r| r.as_slice()).collect();
-
-            let table_output = format_table(&refs)?;
-
-            println!("{}", table_output)
+            if !rows.is_empty() {
+                let refs: Vec<_> = rows.iter().map(|r| r.as_slice()).collect();
+                print!("{}", format_table(&refs)?);
+            }
         }
 
         Ok(())
