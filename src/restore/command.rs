@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    aerospace::Aerospace, cli::CommandHandler, restore::restore::restore_stage, stage::Stage,
+    aerospace::Aerospace,
+    cli::CommandHandler,
+    restore::restore::restore_stage,
+    stage::repository::StageRepository,
 };
 
 pub struct RestoreCommandHandler {
@@ -14,10 +17,10 @@ impl CommandHandler for RestoreCommandHandler {
 
         let stage_path = config.stage_directory.join(&self.stage);
 
-        let stage = Stage::load_from_file(&stage_path)
+        let stage_file = StageRepository::load_from_file(&stage_path)
             .with_context(|| "Failed to load stage from file.")?;
 
-        restore_stage(&aerospace, &stage)
+        restore_stage(&aerospace, &stage_file.stage)
             .with_context(|| format!("Failed to restore stage '{}'", &self.stage))?;
 
         Ok(())
