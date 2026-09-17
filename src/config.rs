@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 const AEROSTAGE_DIR: &str = ".aerostage";
 const AEROSTAGE_CONFIG_FILE_NAME: &str = "config.toml";
-#[cfg(not(any(debug_assertions, feature = "cwd-stages")))]
+#[cfg(not(all(debug_assertions, feature = "cwd-stages")))]
 const AEROSTAGE_DEFAULT_STAGES_DIR: &str = "stages";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -53,12 +53,12 @@ impl Config {
     }
 
     fn default_stage_directory() -> PathBuf {
-        #[cfg(any(debug_assertions, feature = "cwd-stages"))]
+        #[cfg(all(debug_assertions, feature = "cwd-stages"))]
         {
             return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         }
 
-        #[cfg(not(any(debug_assertions, feature = "cwd-stages")))]
+        #[cfg(not(all(debug_assertions, feature = "cwd-stages")))]
         {
             dirs::home_dir()
                 .expect("Failed to derive user home dir.")
