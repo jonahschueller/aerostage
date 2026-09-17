@@ -39,7 +39,10 @@ pub struct RestoreArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct ListArgs;
+pub struct ListArgs {
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub json: bool,
+}
 
 impl From<RestoreArgs> for RestoreCommandHandler {
     fn from(args: RestoreArgs) -> Self {
@@ -58,8 +61,10 @@ impl From<CaptureArgs> for CaptureCommandHandler {
 }
 
 impl From<ListArgs> for StageListCommandHandler {
-    fn from(_value: ListArgs) -> Self {
-        StageListCommandHandler {}
+    fn from(value: ListArgs) -> Self {
+        StageListCommandHandler {
+            json_output: value.json,
+        }
     }
 }
 
