@@ -3,20 +3,20 @@ use std::fmt::Write;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum PrintTableError {
+pub enum TableFormatError {
     #[error("All rows need to have the exact same number of columns.")]
     VaryingNumberOfColumns,
     #[error("The given table is empty.")]
     EmptyTable,
 }
 
-pub fn print_table(rows: &[&[&str]]) -> Result<String, PrintTableError> {
+pub fn format_table(rows: &[&[&str]]) -> Result<String, TableFormatError> {
     let num_columns = rows
         .first()
         .map(|r| r.len())
-        .ok_or(PrintTableError::EmptyTable)?;
+        .ok_or(TableFormatError::EmptyTable)?;
     if rows.iter().any(|r| r.len() != num_columns) {
-        return Err(PrintTableError::VaryingNumberOfColumns);
+        return Err(TableFormatError::VaryingNumberOfColumns);
     }
 
     let mut column_widths = vec![0; num_columns];
@@ -43,23 +43,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_print_table_valid() {
+    fn test_format_table_valid() {
         let rows = vec![vec!["Name", "Age"], vec!["Alice", "30"], vec!["Bob", "25"]];
         let refs: Vec<&[&str]> = rows.iter().map(|r| r.as_slice()).collect();
 
         // To capture printed output, use the test framework or redirect stdout, but we just test no error returned.
-        assert!(print_table(&refs).is_ok());
+        assert!(format_table(&refs).is_ok());
     }
 
     #[test]
-    fn test_print_table_empty() {
+    fn test_format_table_empty() {
         let rows: Vec<&[&str]> = vec![];
-        let res = print_table(&rows);
-        assert!(matches!(res, Err(PrintTableError::EmptyTable)));
+        let res = format_table(&rows);
+        assert!(matches!(res, Err(TableFormatError::EmptyTable)));
     }
 
     #[test]
-    fn test_print_table_varying_columns() {
+    fn test_format_table_varying_columns() {
         let rows = vec![
             vec!["Name", "Age"],
             vec!["Alice"],
@@ -67,12 +67,12 @@ mod tests {
         ];
         let refs: Vec<&[&str]> = rows.iter().map(|r| r.as_slice()).collect();
 
-        let res = print_table(&refs);
-        assert!(matches!(res, Err(PrintTableError::VaryingNumberOfColumns)));
+        let res = format_table(&refs);
+        assert!(matches!(res, Err(TableFormatError::VaryingNumberOfColumns)));
     }
 
     #[test]
-    fn test_print_table_column_widths() {
+    fn test_format_table_column_widths() {
         let rows = vec![
             vec!["Header", "Col2", "X"],
             vec!["LongName", "Dat", "Z"],
@@ -81,6 +81,6 @@ mod tests {
         let refs: Vec<&[&str]> = rows.iter().map(|r| r.as_slice()).collect();
 
         // This should succeed, and column widths should be max of each column.
-        assert!(print_table(&refs).is_ok());
+        assert!(format_table(&refs).is_ok());
     }
 }
