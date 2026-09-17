@@ -1,11 +1,58 @@
 use std::{
     fs::{self, File},
+    io,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use thiserror::Error;
 
 use crate::{config::Config, stage::Stage};
+
+#[derive(Error, Debug)]
+pub enum StageRepositoryError {
+    #[error("failed to create stage file '{}'", path.display())]
+    CreateFile {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("failed to save stage to '{}'", path.display())]
+    Save {
+        path: PathBuf,
+        #[source]
+        source: anyhow::Error,
+    },
+    #[error("failed to read stage file '{}'", path.display())]
+    ReadFile {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("failed to parse stage file '{}'", path.display())]
+    Deserialize {
+        path: PathBuf,
+        #[source]
+        source: toml::de::Error,
+    },
+    #[error("'{}' is not a directory", path.display())]
+    NotADirectory { path: PathBuf },
+    #[error("failed to read directory '{}'", path.display())]
+    ReadDir {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("failed to read directory entry in '{}'", path.display())]
+    ReadDirEntry {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("no stages found in directory '{}'", path.display())]
+    NoStagesFound { path: PathBuf },
+}
+
+type Result<T> = std::result::Result<T, StageRepositoryError>;
 
 #[derive(Debug)]
 pub struct StageFile {
@@ -18,60 +65,81 @@ pub struct StageRepository {}
 impl StageRepository {
     #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(stage: Stage, path: P) -> Result<()> {
-        stage.write(Box::new(File::create(&path)?))
+        let path = path.as_ref();
+        let file = File::create(path).map_err(|source| StageRepositoryError::CreateFile {
+            path: path.to_path_buf(),
+            source,
+        })?;
+
+        stage
+            .write(Box::new(file))
+            .map_err(|source| StageRepositoryError::Save {
+                path: path.to_path_buf(),
+                source,
+            })
     }
 
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<StageFile> {
         let path = path.as_ref();
 
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read file '{}'.", path.display()))?;
+        let content =
+            fs::read_to_string(path).map_err(|source| StageRepositoryError::ReadFile {
+                path: path.to_path_buf(),
+                source,
+            })?;
 
-        let stage: Stage = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse TOML from '{}'.", path.display()))?;
+        let stage: Stage =
+            toml::from_str(&content).map_err(|source| StageRepositoryError::Deserialize {
+                path: path.to_path_buf(),
+                source,
+            })?;
 
         Ok(StageFile {
             path: path.to_path_buf(),
-            stage: stage,
+            stage,
         })
     }
 
     pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<StageFile>> {
         let dir = dir.as_ref();
 
-        ensure!(dir.is_dir(), "'{}' is not a directory", dir.display());
+        if !dir.is_dir() {
+            return Err(StageRepositoryError::NotADirectory {
+                path: dir.to_path_buf(),
+            });
+        }
 
-        let entries = fs::read_dir(dir)
-            .with_context(|| format!("Failed to read directory '{}'", dir.display()))?;
+        let entries = fs::read_dir(dir).map_err(|source| StageRepositoryError::ReadDir {
+            path: dir.to_path_buf(),
+            source,
+        })?;
 
         let mut stages = Vec::new();
 
         for entry in entries {
-            let entry = entry.with_context(|| "Failed to read directory entry.")?;
+            let entry = entry.map_err(|source| StageRepositoryError::ReadDirEntry {
+                path: dir.to_path_buf(),
+                source,
+            })?;
 
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-                let stage = StageRepository::load_from_file(&path).with_context(|| {
-                    format!("Failed to load stage from file '{}'.", path.display())
-                })?;
-
-                stages.push(stage);
+                stages.push(StageRepository::load_from_file(&path)?);
             }
         }
 
-        ensure!(
-            !stages.is_empty(),
-            "No stages found in directory '{}'",
-            dir.display()
-        );
+        if stages.is_empty() {
+            return Err(StageRepositoryError::NoStagesFound {
+                path: dir.to_path_buf(),
+            });
+        }
 
         Ok(stages)
     }
 
     pub fn load_from_config(config: &Config) -> Result<Vec<StageFile>> {
         StageRepository::load_from_dir(&config.stage_directory)
-            .with_context(|| "Failed to load stages from stage directory.")
     }
 }
 
@@ -138,7 +206,30 @@ name = "1"
         fs::write(&file, "name = \"x\"\n").unwrap();
 
         let error = StageRepository::load_from_dir(&file).unwrap_err();
+        assert!(matches!(error, StageRepositoryError::NotADirectory { .. }));
         assert!(error.to_string().contains("is not a directory"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_from_dir_rejects_empty_directories() {
+        let dir = temp_dir("empty-dir");
+
+        let error = StageRepository::load_from_dir(&dir).unwrap_err();
+        assert!(matches!(error, StageRepositoryError::NoStagesFound { .. }));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_from_file_reports_parse_errors() {
+        let dir = temp_dir("bad-toml");
+        let file = dir.join("bad.toml");
+        fs::write(&file, "this is not toml [[[").unwrap();
+
+        let error = StageRepository::load_from_file(&file).unwrap_err();
+        assert!(matches!(error, StageRepositoryError::Deserialize { .. }));
 
         let _ = fs::remove_dir_all(dir);
     }
