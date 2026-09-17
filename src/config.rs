@@ -52,7 +52,8 @@ impl Config {
     }
 
     fn default_stage_directory() -> PathBuf {
-        if cfg!(debug_assertions) {
+        #[cfg(feature = "cwd-stages")]
+        {
             return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         }
 
