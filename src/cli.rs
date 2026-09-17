@@ -4,8 +4,10 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 use crate::{
-    capture::CaptureCommandHandler, config::Config, restore::RestoreCommandHandler,
-    stage::commands::StageListCommandHandler,
+    capture::CaptureCommandHandler,
+    config::Config,
+    restore::RestoreCommandHandler,
+    stage::commands::{StageListCommandHandler, StageShowCommandHandler},
 };
 
 pub trait CommandHandler {
@@ -44,6 +46,11 @@ pub struct ListArgs {
     pub json: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct ShowArgs {
+    pub stage: String,
+}
+
 impl From<RestoreArgs> for RestoreCommandHandler {
     fn from(args: RestoreArgs) -> Self {
         RestoreCommandHandler { stage: args.stage }
@@ -68,11 +75,20 @@ impl From<ListArgs> for StageListCommandHandler {
     }
 }
 
+impl From<ShowArgs> for StageShowCommandHandler {
+    fn from(value: ShowArgs) -> Self {
+        StageShowCommandHandler {
+            stage_path: value.stage,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
     Capture(CaptureArgs),
     Restore(RestoreArgs),
     List(ListArgs),
+    Show(ShowArgs),
 }
 
 impl Commands {
@@ -81,6 +97,7 @@ impl Commands {
             Self::Capture(capture_args) => Box::new(CaptureCommandHandler::from(capture_args)),
             Self::Restore(restore_args) => Box::new(RestoreCommandHandler::from(restore_args)),
             Self::List(list_args) => Box::new(StageListCommandHandler::from(list_args)),
+            Self::Show(show_args) => Box::new(StageShowCommandHandler::from(show_args)),
         }
     }
 }

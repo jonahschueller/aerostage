@@ -98,6 +98,12 @@ impl StageRepository {
         })
     }
 
+    pub fn load_from_relative_path(config: &Config, stage_name: &str) -> Result<StageFile> {
+        let full_path = config.stage_directory.join(stage_name);
+
+        StageRepository::load_from_file(full_path)
+    }
+
     pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<StageFile>> {
         let dir = dir.as_ref();
 

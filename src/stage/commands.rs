@@ -55,3 +55,19 @@ impl CommandHandler for StageListCommandHandler {
         Ok(())
     }
 }
+
+pub struct StageShowCommandHandler {
+    pub stage_path: String,
+}
+impl CommandHandler for StageShowCommandHandler {
+    fn run_command(&self, config: &Config) -> Result<()> {
+        let stage_file =
+            StageRepository::load_from_relative_path(config, self.stage_path.as_str())?;
+
+        let toml_output = toml::to_string_pretty(&stage_file.stage)?;
+
+        println!("{}", toml_output);
+
+        Ok(())
+    }
+}
