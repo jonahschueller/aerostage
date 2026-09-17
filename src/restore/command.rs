@@ -17,10 +17,10 @@ impl CommandHandler for RestoreCommandHandler {
 
         let stage_path = config.stage_directory.join(&self.stage);
 
-        let stage = StageRepository::load_from_file(&stage_path)
+        let stage_file = StageRepository::load_from_file(&stage_path)
             .with_context(|| "Failed to load stage from file.")?;
 
-        restore_stage(&aerospace, &stage)
+        restore_stage(&aerospace, &stage_file.stage)
             .with_context(|| format!("Failed to restore stage '{}'", &self.stage))?;
 
         Ok(())

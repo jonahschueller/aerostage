@@ -1,11 +1,17 @@
 use std::{
     fs::{self, File},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result, ensure};
 
 use crate::{config::Config, stage::Stage};
+
+#[derive(Debug)]
+pub struct StageFile {
+    pub path: PathBuf,
+    pub stage: Stage,
+}
 
 pub struct StageRepository {}
 
@@ -15,19 +21,22 @@ impl StageRepository {
         stage.write(Box::new(File::create(&path)?))
     }
 
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Stage> {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<StageFile> {
         let path = path.as_ref();
 
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read file '{}'.", path.display()))?;
 
-        let stage = toml::from_str(&content)
+        let stage: Stage = toml::from_str(&content)
             .with_context(|| format!("Failed to parse TOML from '{}'.", path.display()))?;
 
-        Ok(stage)
+        Ok(StageFile {
+            path: path.to_path_buf(),
+            stage: stage,
+        })
     }
 
-    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<Stage>> {
+    pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<StageFile>> {
         let dir = dir.as_ref();
 
         ensure!(dir.is_dir(), "'{}' is not a directory", dir.display());
@@ -43,7 +52,6 @@ impl StageRepository {
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-                println!("Loading from file: {}", path.to_str().unwrap());
                 let stage = StageRepository::load_from_file(&path).with_context(|| {
                     format!("Failed to load stage from file '{}'.", path.display())
                 })?;
@@ -61,7 +69,7 @@ impl StageRepository {
         Ok(stages)
     }
 
-    pub fn load_from_config(config: &Config) -> Result<Vec<Stage>> {
+    pub fn load_from_config(config: &Config) -> Result<Vec<StageFile>> {
         StageRepository::load_from_dir(&config.stage_directory)
             .with_context(|| "Failed to load stages from stage directory.")
     }
@@ -118,7 +126,7 @@ name = "1"
 
         let stages = StageRepository::load_from_dir(&dir).unwrap();
         assert_eq!(stages.len(), 1);
-        assert_eq!(stages[0].name.as_deref(), Some("work"));
+        assert_eq!(stages[0].stage.name.as_deref(), Some("work"));
 
         let _ = fs::remove_dir_all(dir);
     }
