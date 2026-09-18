@@ -2,7 +2,10 @@ use std::{fs::File, io::Write};
 
 use anyhow::{Context, Result};
 
-use crate::{aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler};
+use crate::{
+    aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler,
+    stage::repository::normalize_stage_filepath,
+};
 
 pub struct CaptureCommandHandler {
     pub output: Option<String>,
@@ -41,11 +44,12 @@ impl CommandHandler for CaptureCommandHandler {
 
         let writer: Box<dyn Write> = match &stage_filepath {
             Some(file_path) => {
-                if let Some(parent) = file_path.parent() {
+                let normalized_path = normalize_stage_filepath(file_path)?;
+                if let Some(parent) = normalized_path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
 
-                Box::new(File::create(file_path)?)
+                Box::new(File::create(normalized_path)?)
             }
             None => Box::new(std::io::stdout().lock()),
         };

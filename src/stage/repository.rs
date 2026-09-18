@@ -36,6 +36,8 @@ pub enum StageRepositoryError {
     },
     #[error("'{}' is not a directory", path.display())]
     NotADirectory { path: PathBuf },
+    #[error("invalid stage file path: {}", path.display())]
+    InvalidStageFilePath { path: PathBuf },
     #[error("failed to read directory '{}'", path.display())]
     ReadDir {
         path: PathBuf,
@@ -52,6 +54,16 @@ pub enum StageRepositoryError {
 
 type Result<T> = std::result::Result<T, StageRepositoryError>;
 
+pub fn normalize_stage_filepath(path: &Path) -> Result<PathBuf> {
+    match path.extension() {
+        None => Ok(path.with_extension("toml")),
+        Some(ext) if ext == "toml" => Ok(path.to_path_buf()),
+        Some(_) => Err(StageRepositoryError::InvalidStageFilePath {
+            path: path.to_path_buf(),
+        }),
+    }
+}
+
 #[derive(Debug)]
 pub struct StageFile {
     pub path: PathBuf,
@@ -63,8 +75,8 @@ pub struct StageRepository {}
 impl StageRepository {
     #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(stage: Stage, path: P) -> Result<()> {
-        let path = path.as_ref();
-        let file = File::create(path).map_err(|source| StageRepositoryError::CreateFile {
+        let path = normalize_stage_filepath(path.as_ref())?;
+        let file = File::create(&path).map_err(|source| StageRepositoryError::CreateFile {
             path: path.to_path_buf(),
             source,
         })?;
@@ -78,24 +90,21 @@ impl StageRepository {
     }
 
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<StageFile> {
-        let path = path.as_ref();
+        let path = normalize_stage_filepath(path.as_ref())?;
 
         let content =
-            fs::read_to_string(path).map_err(|source| StageRepositoryError::ReadFile {
-                path: path.to_path_buf(),
+            fs::read_to_string(&path).map_err(|source| StageRepositoryError::ReadFile {
+                path: path.clone(),
                 source,
             })?;
 
         let stage: Stage =
             toml::from_str(&content).map_err(|source| StageRepositoryError::Deserialize {
-                path: path.to_path_buf(),
+                path: path.clone(),
                 source,
             })?;
 
-        Ok(StageFile {
-            path: path.to_path_buf(),
-            stage,
-        })
+        Ok(StageFile { path, stage })
     }
 
     pub fn load_from_relative_path(config: &Config, stage_name: &str) -> Result<StageFile> {
@@ -158,7 +167,7 @@ mod tests {
 
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("aerostage-{name}-{}", std::process::id()));
@@ -271,6 +280,90 @@ name = "1"
 
         let error = StageRepository::load_from_file(&file).unwrap_err();
         assert!(matches!(error, StageRepositoryError::Deserialize { .. }));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn normalize_stage_filepath_appends_toml_when_missing() {
+        assert_eq!(
+            normalize_stage_filepath(Path::new("work")).unwrap(),
+            PathBuf::from("work.toml")
+        );
+        assert_eq!(
+            normalize_stage_filepath(Path::new("stages/work")).unwrap(),
+            PathBuf::from("stages/work.toml")
+        );
+    }
+
+    #[test]
+    fn normalize_stage_filepath_keeps_toml_extension() {
+        assert_eq!(
+            normalize_stage_filepath(Path::new("work.toml")).unwrap(),
+            PathBuf::from("work.toml")
+        );
+    }
+
+    #[test]
+    fn normalize_stage_filepath_rejects_other_extensions() {
+        let error = normalize_stage_filepath(Path::new("work.json")).unwrap_err();
+        assert!(matches!(
+            error,
+            StageRepositoryError::InvalidStageFilePath { .. }
+        ));
+        assert!(error.to_string().contains("work.json"));
+    }
+
+    #[test]
+    fn load_from_file_accepts_path_without_extension() {
+        let dir = temp_dir("load-without-ext");
+        fs::write(
+            dir.join("work.toml"),
+            r#"
+name = "work"
+
+[[workspace]]
+name = "1"
+"#,
+        )
+        .unwrap();
+
+        let stage_file = StageRepository::load_from_file(dir.join("work")).unwrap();
+        assert_eq!(stage_file.stage.name.as_deref(), Some("work"));
+        assert_eq!(stage_file.path, dir.join("work.toml"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_from_file_rejects_non_toml_extension() {
+        let error = StageRepository::load_from_file("work.json").unwrap_err();
+        assert!(matches!(
+            error,
+            StageRepositoryError::InvalidStageFilePath { .. }
+        ));
+    }
+
+    #[test]
+    fn load_from_relative_path_accepts_stage_name_without_extension() {
+        let dir = temp_dir("relative-without-ext");
+        fs::write(
+            dir.join("work.toml"),
+            r#"
+name = "work"
+
+[[workspace]]
+name = "1"
+"#,
+        )
+        .unwrap();
+
+        let config = Config {
+            stage_directory: dir.clone(),
+        };
+        let stage_file = StageRepository::load_from_relative_path(&config, "work").unwrap();
+        assert_eq!(stage_file.stage.name.as_deref(), Some("work"));
+        assert_eq!(stage_file.path, dir.join("work.toml"));
 
         let _ = fs::remove_dir_all(dir);
     }
