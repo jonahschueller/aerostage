@@ -108,3 +108,22 @@ impl Commands {
 pub fn execute_command(command: Commands, config: &Config) -> Result<()> {
     command.create_handler().run_command(config)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn capture_parses_explicit_name_separately_from_output() {
+        let cli = Cli::try_parse_from(["aerostage", "capture", "work", "--name", "focus"]).unwrap();
+
+        match cli.command {
+            Commands::Capture(args) => {
+                assert_eq!(args.output.as_deref(), Some("work"));
+                assert_eq!(args.name.as_deref(), Some("focus"));
+            }
+            _ => panic!("expected capture command"),
+        }
+    }
+}
