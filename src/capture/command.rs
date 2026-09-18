@@ -9,6 +9,7 @@ use crate::{
 
 pub struct CaptureCommandHandler {
     pub output: Option<String>,
+    pub name: Option<String>,
     pub workspaces: Option<String>,
     pub default_workspace: Option<String>,
 }
@@ -19,6 +20,13 @@ pub(crate) fn parse_workspace_list(workspaces: &str) -> Vec<&str> {
         .map(str::trim)
         .filter(|workspace| !workspace.is_empty())
         .collect()
+}
+
+pub(crate) fn resolve_captured_stage_name<'a>(
+    name: Option<&'a str>,
+    output: Option<&'a str>,
+) -> Option<&'a str> {
+    name.or(output)
 }
 
 impl CommandHandler for CaptureCommandHandler {
@@ -36,7 +44,7 @@ impl CommandHandler for CaptureCommandHandler {
 
         let stage = capturer
             .capture(
-                self.output.as_deref(),
+                resolve_captured_stage_name(self.name.as_deref(), self.output.as_deref()),
                 capture_workspaces.as_deref(),
                 self.default_workspace.as_deref(),
             )
@@ -68,5 +76,26 @@ mod tests {
     fn parse_workspace_list_trims_and_drops_empty_entries() {
         assert_eq!(parse_workspace_list("1, 2, 3"), vec!["1", "2", "3"]);
         assert_eq!(parse_workspace_list("1,,2,"), vec!["1", "2"]);
+    }
+
+    #[test]
+    fn resolve_captured_stage_name_prefers_explicit_name() {
+        assert_eq!(
+            resolve_captured_stage_name(Some("focus"), Some("work")),
+            Some("focus")
+        );
+    }
+
+    #[test]
+    fn resolve_captured_stage_name_falls_back_to_output() {
+        assert_eq!(
+            resolve_captured_stage_name(None, Some("work")),
+            Some("work")
+        );
+    }
+
+    #[test]
+    fn resolve_captured_stage_name_is_none_when_both_missing() {
+        assert_eq!(resolve_captured_stage_name(None, None), None);
     }
 }
