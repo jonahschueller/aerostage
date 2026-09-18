@@ -28,9 +28,11 @@ pub fn format_table(rows: &[&[&str]]) -> Result<String, TableFormatError> {
 
     let mut output = String::new();
     for row in rows.iter() {
-        output.push('|');
         for (i, cell) in row.iter().enumerate() {
-            let _ = write!(output, " {:<width$} |", cell, width = column_widths[i]);
+            let _ = write!(output, "{:<width$}", cell, width = column_widths[i]);
+            if i < row.len() - 1 {
+                output.push_str(" | ");
+            }
         }
         output.push('\n');
     }
