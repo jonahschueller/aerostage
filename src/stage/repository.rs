@@ -54,7 +54,7 @@ pub enum StageRepositoryError {
 
 type Result<T> = std::result::Result<T, StageRepositoryError>;
 
-fn normalize_stage_filepath(path: &Path) -> Result<PathBuf> {
+pub fn normalize_stage_filepath(path: &Path) -> Result<PathBuf> {
     match path.extension() {
         None => Ok(path.with_extension("toml")),
         Some(ext) if ext == "toml" => Ok(path.to_path_buf()),

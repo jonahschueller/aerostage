@@ -1,9 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    aerospace::Aerospace,
-    cli::CommandHandler,
-    restore::restore::restore_stage,
+    aerospace::Aerospace, cli::CommandHandler, restore::restore::restore_stage,
     stage::repository::StageRepository,
 };
 
