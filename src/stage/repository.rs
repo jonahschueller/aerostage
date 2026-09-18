@@ -36,6 +36,8 @@ pub enum StageRepositoryError {
     },
     #[error("'{}' is not a directory", path.display())]
     NotADirectory { path: PathBuf },
+    #[error("invalid stage file path: {}", path.display())]
+    InvalidStageFilePath { path: PathBuf },
     #[error("failed to read directory '{}'", path.display())]
     ReadDir {
         path: PathBuf,
@@ -51,6 +53,16 @@ pub enum StageRepositoryError {
 }
 
 type Result<T> = std::result::Result<T, StageRepositoryError>;
+
+fn normalize_stage_filepath(path: &Path) -> Result<PathBuf> {
+    match path.extension() {
+        None => Ok(path.with_extension("toml")),
+        Some(ext) if ext == "toml" => Ok(path.to_path_buf()),
+        Some(_) => Err(StageRepositoryError::InvalidStageFilePath {
+            path: path.to_path_buf(),
+        }),
+    }
+}
 
 #[derive(Debug)]
 pub struct StageFile {
@@ -78,24 +90,21 @@ impl StageRepository {
     }
 
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<StageFile> {
-        let path = path.as_ref();
+        let path = normalize_stage_filepath(path.as_ref())?;
 
         let content =
-            fs::read_to_string(path).map_err(|source| StageRepositoryError::ReadFile {
-                path: path.to_path_buf(),
+            fs::read_to_string(&path).map_err(|source| StageRepositoryError::ReadFile {
+                path: path.clone(),
                 source,
             })?;
 
         let stage: Stage =
             toml::from_str(&content).map_err(|source| StageRepositoryError::Deserialize {
-                path: path.to_path_buf(),
+                path: path.clone(),
                 source,
             })?;
 
-        Ok(StageFile {
-            path: path.to_path_buf(),
-            stage,
-        })
+        Ok(StageFile { path, stage })
     }
 
     pub fn load_from_relative_path(config: &Config, stage_name: &str) -> Result<StageFile> {
