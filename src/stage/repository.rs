@@ -75,8 +75,8 @@ pub struct StageRepository {}
 impl StageRepository {
     #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(stage: Stage, path: P) -> Result<()> {
-        let path = path.as_ref();
-        let file = File::create(path).map_err(|source| StageRepositoryError::CreateFile {
+        let path = normalize_stage_filepath(path.as_ref())?;
+        let file = File::create(&path).map_err(|source| StageRepositoryError::CreateFile {
             path: path.to_path_buf(),
             source,
         })?;
