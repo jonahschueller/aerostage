@@ -9,6 +9,7 @@ use crate::{
 
 pub struct CaptureCommandHandler {
     pub output: Option<String>,
+    pub name: Option<String>,
     pub workspaces: Option<String>,
     pub default_workspace: Option<String>,
 }
@@ -36,7 +37,7 @@ impl CommandHandler for CaptureCommandHandler {
 
         let stage = capturer
             .capture(
-                self.output.as_deref(),
+                self.name.as_deref().or(self.output.as_deref()),
                 capture_workspaces.as_deref(),
                 self.default_workspace.as_deref(),
             )

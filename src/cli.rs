@@ -33,6 +33,8 @@ pub struct CaptureArgs {
     pub workspaces: Option<String>,
     #[arg(long)]
     pub default_workspace: Option<String>,
+    #[arg(long)]
+    pub name: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -61,6 +63,7 @@ impl From<CaptureArgs> for CaptureCommandHandler {
     fn from(args: CaptureArgs) -> Self {
         CaptureCommandHandler {
             output: args.output,
+            name: args.name,
             workspaces: args.workspaces,
             default_workspace: args.default_workspace,
         }
