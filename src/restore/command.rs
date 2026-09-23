@@ -13,15 +13,14 @@ impl CommandHandler for RestoreCommandHandler {
     fn run_command(&self, config: &Config) -> Result<()> {
         let aerospace = Aerospace::connect()?;
 
-        let stage_path = config
-            .stage_directory
-            .join(&self.stage.or(config.default_stage));
+        let stage_name = self.stage.as_ref().unwrap_or(&config.default_stage);
+        let stage_path = config.stage_directory.join(&stage_name);
 
         let stage_file = StageRepository::load_from_file(&stage_path)
             .with_context(|| "Failed to load stage from file.")?;
 
         restore_stage(&aerospace, &stage_file.stage)
-            .with_context(|| format!("Failed to restore stage '{}'", &self.stage))?;
+            .with_context(|| format!("Failed to restore stage '{}'", &stage_name))?;
 
         Ok(())
     }

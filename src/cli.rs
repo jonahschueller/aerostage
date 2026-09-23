@@ -39,7 +39,7 @@ pub struct CaptureArgs {
 
 #[derive(Args, Debug)]
 pub struct RestoreArgs {
-    pub stage: String,
+    pub stage: Option<String>,
 }
 
 #[derive(Args, Debug)]
