@@ -1,6 +1,6 @@
 use std::{fs::File, io::Write};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use crate::{
     aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler,
@@ -12,6 +12,7 @@ pub struct CaptureCommandHandler {
     pub name: Option<String>,
     pub workspaces: Option<String>,
     pub default_workspace: Option<String>,
+    pub stdout_output: bool,
 }
 
 pub(crate) fn parse_workspace_list(workspaces: &str) -> Vec<&str> {
@@ -31,12 +32,20 @@ pub(crate) fn resolve_captured_stage_name<'a>(
 
 impl CommandHandler for CaptureCommandHandler {
     fn run_command(&self, config: &crate::config::Config) -> Result<()> {
+        ensure!(
+            !self.stdout_output || self.output.is_none(),
+            "--stdout output cannot be used when output is specified"
+        );
+
         let aerospace = Aerospace::connect()?;
 
-        let stage_filepath = self
-            .output
-            .as_deref()
-            .map(|out| config.stage_directory.join(out));
+        let stage_filepath = if let Some(output) = self.output.as_deref() {
+            Some(config.stage_directory.join(output))
+        } else if !self.stdout_output {
+            Some(config.stage_directory.join(&config.default_stage))
+        } else {
+            None
+        };
 
         let capture_workspaces = self.workspaces.as_deref().map(parse_workspace_list);
 

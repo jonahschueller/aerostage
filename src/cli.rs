@@ -35,6 +35,9 @@ pub struct CaptureArgs {
     pub default_workspace: Option<String>,
     #[arg(long)]
     pub name: Option<String>,
+
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub stdout: bool,
 }
 
 #[derive(Args, Debug)]
@@ -66,6 +69,7 @@ impl From<CaptureArgs> for CaptureCommandHandler {
             name: args.name,
             workspaces: args.workspaces,
             default_workspace: args.default_workspace,
+            stdout_output: args.stdout,
         }
     }
 }
