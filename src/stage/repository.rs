@@ -358,9 +358,7 @@ name = "1"
         )
         .unwrap();
 
-        let config = Config {
-            stage_directory: dir.clone(),
-        };
+        let config = Config::with_stage_dir(dir.clone());
         let stage_file = StageRepository::load_from_relative_path(&config, "work").unwrap();
         assert_eq!(stage_file.stage.name.as_deref(), Some("work"));
         assert_eq!(stage_file.path, dir.join("work.toml"));

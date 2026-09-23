@@ -9,25 +9,32 @@ use serde::{Deserialize, Serialize};
 
 const AEROSTAGE_DIR: &str = ".aerostage";
 const AEROSTAGE_CONFIG_FILE_NAME: &str = "config.toml";
+const AEROSTAGE_DEFAULT_STAGE_NAME: &str = "default.toml";
 #[cfg(not(all(debug_assertions, feature = "cwd-stages")))]
 const AEROSTAGE_DEFAULT_STAGES_DIR: &str = "stages";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub stage_directory: PathBuf,
+    pub default_stage: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
         let stage_dir = Self::default_stage_directory();
 
-        Config {
-            stage_directory: stage_dir,
-        }
+        Config::with_stage_dir(stage_dir)
     }
 }
 
 impl Config {
+    pub fn with_stage_dir(stage_dir: PathBuf) -> Self {
+        Config {
+            stage_directory: stage_dir,
+            default_stage: AEROSTAGE_DEFAULT_STAGE_NAME.to_string(),
+        }
+    }
+
     pub fn load(config: Option<PathBuf>) -> Result<Self> {
         let user_config = match config {
             Some(path) => {
