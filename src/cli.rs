@@ -50,7 +50,7 @@ pub struct ListArgs {
 
 #[derive(Args, Debug)]
 pub struct ShowArgs {
-    pub stage: String,
+    pub stage: Option<String>,
 }
 
 impl From<RestoreArgs> for RestoreCommandHandler {
