@@ -24,6 +24,18 @@ That puts `aerostage` on your path. A release build stores stages in `~/.aerosta
 
 `cargo run` uses a debug build, which writes stages into the current working directory instead.
 
+## Config
+
+If `~/.aerostage/config.toml` exists, AeroStage loads it. Pass `--config path` to use a different file.
+
+`default_stage` is the filename used when `capture`, `restore`, or `show` is run without one. It is joined with the stage directory, the same way an explicit filename is. When the key is missing, AeroStage uses `default.toml`.
+
+```toml
+default_stage = "work.toml"
+```
+
+`stage_directory` overrides the directory stage files are read from and written to.
+
 ## Stages
 
 A **stage** is a TOML snapshot of which windows belong on which workspace. Capture writes one from the live AeroSpace tree. You can also write or edit a stage by hand.
@@ -42,13 +54,21 @@ Typical uses:
 aerostage capture work.toml
 ```
 
-Writes the current assignment into `work.toml` in the stage directory.
+Writes the current assignment into `work.toml` in the stage directory. The stage's `name` is that filename, unless you pass `--name`.
 
-Omit the filename to print TOML to stdout:
+Omit the filename to write the default stage:
 
 ```sh
 aerostage capture
 ```
+
+Print the stage to stdout instead of writing a file:
+
+```sh
+aerostage capture --stdout
+```
+
+`--stdout` cannot be combined with a filename. A stdout capture has no `name` unless you pass `--name`.
 
 Capture only some workspaces:
 
@@ -65,6 +85,12 @@ aerostage restore work.toml
 ```
 
 Loads that file from the stage directory and moves matching windows onto the workspaces recorded in the stage.
+
+Omit the filename to restore the default stage:
+
+```sh
+aerostage restore
+```
 
 Windows that cannot be matched are left where they are. AeroStage prints a line for each of those on stderr.
 

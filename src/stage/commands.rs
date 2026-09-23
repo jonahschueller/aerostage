@@ -61,7 +61,7 @@ pub struct StageShowCommandHandler {
 }
 impl CommandHandler for StageShowCommandHandler {
     fn run_command(&self, config: &Config) -> Result<()> {
-        let stage_name = &self.stage_path.as_ref().unwrap_or(&config.default_stage);
+        let stage_name = config.resolve_stage_name(self.stage_path.as_deref());
         let stage_file = StageRepository::load_from_relative_path(config, stage_name)?;
 
         let toml_output = toml::to_string_pretty(&stage_file.stage)?;

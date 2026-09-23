@@ -35,6 +35,10 @@ impl Config {
         }
     }
 
+    pub fn resolve_stage_name<'a>(&'a self, requested: Option<&'a str>) -> &'a str {
+        requested.unwrap_or(self.default_stage.as_str())
+    }
+
     pub fn load(config: Option<PathBuf>) -> Result<Self> {
         let user_config = match config {
             Some(path) => {
@@ -97,5 +101,45 @@ mod tests {
 
         let error = Config::load(Some(missing.clone())).unwrap_err();
         assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn load_uses_default_stage_when_config_omits_it() {
+        let path = std::env::temp_dir().join(format!(
+            "aerostage-config-defaults-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(&path, "stage_directory = \"/tmp/aerostage-stages\"\n").unwrap();
+
+        let config = Config::load(Some(path.clone())).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(config.default_stage, "default.toml");
+        assert_eq!(
+            config.stage_directory,
+            PathBuf::from("/tmp/aerostage-stages")
+        );
+    }
+
+    #[test]
+    fn load_reads_default_stage_from_config() {
+        let path = std::env::temp_dir().join(format!(
+            "aerostage-config-default-stage-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(&path, "default_stage = \"focus.toml\"\n").unwrap();
+
+        let config = Config::load(Some(path.clone())).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(config.default_stage, "focus.toml");
+    }
+
+    #[test]
+    fn resolve_stage_name_falls_back_to_default_stage() {
+        let config = Config::with_stage_dir(PathBuf::from("/stages"));
+
+        assert_eq!(config.resolve_stage_name(None), "default.toml");
+        assert_eq!(config.resolve_stage_name(Some("work.toml")), "work.toml");
     }
 }

@@ -36,7 +36,7 @@ pub struct CaptureArgs {
     #[arg(long)]
     pub name: Option<String>,
 
-    #[arg(long, action = clap::ArgAction::SetTrue)]
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "output")]
     pub stdout: bool,
 }
 
@@ -128,6 +128,43 @@ mod tests {
                 assert_eq!(args.name.as_deref(), Some("focus"));
             }
             _ => panic!("expected capture command"),
+        }
+    }
+
+    #[test]
+    fn capture_stdout_parses_without_a_filename() {
+        let cli = Cli::try_parse_from(["aerostage", "capture", "--stdout"]).unwrap();
+
+        match cli.command {
+            Commands::Capture(args) => {
+                assert!(args.stdout);
+                assert!(args.output.is_none());
+            }
+            _ => panic!("expected capture command"),
+        }
+    }
+
+    #[test]
+    fn capture_stdout_conflicts_with_a_filename() {
+        let Err(error) = Cli::try_parse_from(["aerostage", "capture", "work", "--stdout"]) else {
+            panic!("expected stdout to conflict with a filename");
+        };
+
+        assert!(error.to_string().contains("cannot be used"));
+    }
+
+    #[test]
+    fn restore_and_show_stage_arguments_are_optional() {
+        let restore = Cli::try_parse_from(["aerostage", "restore"]).unwrap();
+        match restore.command {
+            Commands::Restore(args) => assert!(args.stage.is_none()),
+            _ => panic!("expected restore command"),
+        }
+
+        let show = Cli::try_parse_from(["aerostage", "show"]).unwrap();
+        match show.command {
+            Commands::Show(args) => assert!(args.stage.is_none()),
+            _ => panic!("expected show command"),
         }
     }
 }

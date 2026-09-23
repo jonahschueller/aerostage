@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::aerospace::{
-    backend::AerospaceBackend, AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
-    AerospaceWorkspace, AerospaceWorkspaceId,
+    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
+    AerospaceWorkspaceId, backend::AerospaceBackend,
 };
 
 pub struct MockAerospaceBackend {}
