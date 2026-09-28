@@ -1,42 +1,33 @@
 use crate::{
     aerospace::AerospaceWindow,
     restore::{
-        rule::WindowResolverRule,
-        types::{ResolveTarget, ResolvedWindowMatch},
+        rule::{Candidate, WindowResolverRule},
+        types::ResolveTarget,
     },
 };
 
-/// Matches against windows which are already on the target workspace if they are
-/// from the target application.
-/// The rule only matches if there is exactly one window of this app on the target workspace
+/// Proposes live windows that are already on the target workspace and share
+/// the target application. The resolver commits only when that set is unique.
 pub struct TargetWorkspaceResolverRule {}
 
 impl WindowResolverRule for TargetWorkspaceResolverRule {
-    fn match_window(
-        &self,
-        windows: &[AerospaceWindow],
-        target: &ResolveTarget,
-    ) -> Option<ResolvedWindowMatch> {
-        let target_workspace = target.target_workspace;
-
-        let mut workspace_matches = windows
+    fn propose(&self, windows: &[AerospaceWindow], target: &ResolveTarget<'_>) -> Vec<Candidate> {
+        windows
             .iter()
-            .filter(|window| window.workspace == target_workspace.name)
-            .filter(|window| target.matches_window_app(window));
-
-        match (workspace_matches.next(), workspace_matches.next()) {
-            (Some(first_match), None) => Some(ResolvedWindowMatch {
-                target_workspace: target.target_workspace.name.clone(),
-                window_id: first_match.window_id,
-            }),
-            _ => None,
-        }
+            .filter(|window| window.workspace == target.target_workspace.name)
+            .filter(|window| target.matches_window_app(window))
+            .map(|window| Candidate {
+                window_id: window.window_id,
+                score: 0.4,
+            })
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::restore::types::{ResolveTarget, ResolvedWindowMatch};
     use crate::stage::{StageWindow, StageWorkspace};
 
     // Helper to construct a standard ResolveTarget quickly
@@ -119,6 +110,7 @@ mod test {
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);
+        assert_eq!(resolver.propose(&windows, &target).len(), 2);
     }
 
     #[test]

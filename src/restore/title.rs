@@ -1,16 +1,22 @@
+use std::sync::LazyLock;
+
 use regex::Regex;
+
+static COUNT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\(\d+\)").unwrap());
 
 pub fn normalize_title(title: &str, app_name: &str) -> String {
     let mut title = title.to_string();
 
-    title = title
-        .replace(format!("— {}", app_name).as_str(), "")
-        .replace(format!("-{}", app_name).as_str(), "");
+    if !app_name.is_empty() {
+        title = title
+            .replace(format!("— {app_name}").as_str(), "")
+            .replace(format!("-{app_name}").as_str(), "");
+    }
 
-    let re = Regex::new(r"\(\d+\)").unwrap();
-    title = re.replace_all(&title, "").to_string();
+    title = COUNT_RE.replace_all(&title, "").into_owned();
+    title = title.trim_start_matches(['●', '•']).trim().to_string();
 
-    title.trim().to_string()
+    title
 }
 
 #[cfg(test)]
@@ -19,22 +25,18 @@ mod tests {
 
     #[test]
     fn it_removes_dash_and_en_dash_app_name() {
-        // Simple dash
         assert_eq!(
             normalize_title("My Document -Notion", "Notion"),
             "My Document"
         );
-        // En dash
         assert_eq!(
             normalize_title("My Document — Notion", "Notion"),
             "My Document"
         );
-        // No match: app name in the middle should not be trimmed
         assert_eq!(
             normalize_title("Notion is great!", "Notion"),
             "Notion is great!"
         );
-        // No dash with app name at end: doesn't match, but should return original
         assert_eq!(
             normalize_title("My Document Notion", "Notion"),
             "My Document Notion"
@@ -51,7 +53,6 @@ mod tests {
             normalize_title("Task List (123) -Notion", "Notion"),
             "Task List"
         );
-        // with en dash
         assert_eq!(normalize_title("Inbox (42) — Notion", "Notion"), "Inbox");
     }
 
@@ -73,10 +74,15 @@ mod tests {
 
     #[test]
     fn it_is_case_sensitive() {
-        // "notion" != "Notion"
         assert_eq!(
             normalize_title("My Document -notion", "Notion"),
             "My Document -notion"
         );
+    }
+
+    #[test]
+    fn it_strips_dirty_file_markers() {
+        assert_eq!(normalize_title("● main.rs", "Code"), "main.rs");
+        assert_eq!(normalize_title("• main.rs — Code", "Code"), "main.rs");
     }
 }

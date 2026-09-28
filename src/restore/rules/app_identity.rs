@@ -1,60 +1,53 @@
 use crate::{
     aerospace::AerospaceWindow,
     restore::{
-        rule::WindowResolverRule,
-        types::{ResolveTarget, ResolvedWindowMatch, present_text},
+        rule::{Candidate, WindowResolverRule},
+        types::{ResolveTarget, present_text},
     },
 };
 
 pub struct UniqueBundleIdResolverRule {}
 
 impl WindowResolverRule for UniqueBundleIdResolverRule {
-    fn match_window(
-        &self,
-        windows: &[AerospaceWindow],
-        target: &ResolveTarget,
-    ) -> Option<ResolvedWindowMatch> {
-        let mut bundle_id_matches = windows.iter().filter(|window| {
-            present_text(target.target_window.bundle_id.as_deref())
-                .is_some_and(|bundle_id| window.app_bundle_id == bundle_id)
-        });
+    fn propose(&self, windows: &[AerospaceWindow], target: &ResolveTarget<'_>) -> Vec<Candidate> {
+        let Some(bundle_id) = present_text(target.target_window.bundle_id.as_deref()) else {
+            return Vec::new();
+        };
 
-        match (bundle_id_matches.next(), bundle_id_matches.next()) {
-            (Some(first_match), None) => Some(ResolvedWindowMatch {
-                target_workspace: target.target_workspace.name.clone(),
-                window_id: first_match.window_id,
-            }),
-            _ => None,
-        }
+        windows
+            .iter()
+            .filter(|window| window.app_bundle_id == bundle_id)
+            .map(|window| Candidate {
+                window_id: window.window_id,
+                score: 0.2,
+            })
+            .collect()
     }
 }
 
 pub struct UniqueAppNameResolverRule {}
 
 impl WindowResolverRule for UniqueAppNameResolverRule {
-    fn match_window(
-        &self,
-        windows: &[AerospaceWindow],
-        target: &ResolveTarget,
-    ) -> Option<ResolvedWindowMatch> {
-        let mut matches = windows.iter().filter(|window| {
-            present_text(target.target_window.app.as_deref())
-                .is_some_and(|app| window.app_name == app)
-        });
+    fn propose(&self, windows: &[AerospaceWindow], target: &ResolveTarget<'_>) -> Vec<Candidate> {
+        let Some(app) = present_text(target.target_window.app.as_deref()) else {
+            return Vec::new();
+        };
 
-        match (matches.next(), matches.next()) {
-            (Some(first_match), None) => Some(ResolvedWindowMatch {
-                target_workspace: target.target_workspace.name.clone(),
-                window_id: first_match.window_id,
-            }),
-            _ => None,
-        }
+        windows
+            .iter()
+            .filter(|window| window.app_name == app)
+            .map(|window| Candidate {
+                window_id: window.window_id,
+                score: 0.1,
+            })
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::restore::types::{ResolveTarget, ResolvedWindowMatch};
     use crate::stage::{StageWindow, StageWorkspace};
 
     // Helper to construct a standard ResolveTarget quickly
@@ -144,6 +137,7 @@ mod test {
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);
+        assert_eq!(resolver.propose(&windows, &target).len(), 2);
     }
 
     #[test]
@@ -235,6 +229,7 @@ mod test {
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);
+        assert_eq!(resolver.propose(&windows, &target).len(), 2);
     }
 
     #[test]
