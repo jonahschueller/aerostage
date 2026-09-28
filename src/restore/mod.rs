@@ -1,3 +1,4 @@
+mod assign;
 mod command;
 mod resolution;
 #[cfg(test)]
