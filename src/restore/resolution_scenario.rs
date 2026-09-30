@@ -494,17 +494,33 @@ mod tests {
     }
 
     #[test]
-    fn similar_titles_above_threshold_do_not_bind_without_an_exact_match() {
+    fn similar_title_picks_the_closer_window_when_several_qualify() {
         Scenario::new()
-            .live("a", NOTES, "Project Ideas 2025")
-            .on("3")
-            .live("b", NOTES, "Project Ideas 2024")
+            .live("far", NOTES, "Project Ideas 2026 draft")
             .on("4")
+            .live("near", NOTES, "Proj Ideas 2026")
+            .on("3")
             .workspace("work", |ws| ws.wants(NOTES, "Project Ideas 2026"))
             .resolve()
-            .pending_title("Project Ideas 2026")
-            .unresolved("a")
-            .unresolved("b");
+            .matched("near", "work")
+            .unresolved("far")
+            .pending_empty();
+    }
+
+    #[test]
+    fn similar_titles_with_distinct_best_partners_both_bind() {
+        Scenario::new()
+            .live("ideas", NOTES, "Project Ideas 2025")
+            .on("3")
+            .live("shopping", NOTES, "Shopping List 2025")
+            .on("4")
+            .workspace("1", |ws| ws.wants(NOTES, "Project Ideas 2026"))
+            .workspace("2", |ws| ws.wants(NOTES, "Shopping List 2026"))
+            .resolve()
+            .matched("ideas", "1")
+            .matched("shopping", "2")
+            .pending_empty()
+            .unresolved_empty();
     }
 
     #[test]
@@ -551,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn fallback_leaves_windows_that_unmatched_stage_entries_may_own() {
+    fn count_by_app_binds_one_leftover_and_fallback_takes_the_rest() {
         Scenario::new()
             .default_workspace("9")
             .live("tab_a", App::Safari, "Tab A")
@@ -562,10 +578,10 @@ mod tests {
             .on("4")
             .workspace("1", |ws| ws.wants(App::Safari, "Missing Tab"))
             .resolve()
-            .pending_title("Missing Tab")
-            .unresolved("tab_a")
-            .unresolved("tab_b")
-            .fallback("team", "9");
+            .matched("tab_a", "1")
+            .fallback("tab_b", "9")
+            .fallback("team", "9")
+            .pending_empty();
     }
 
     #[test]
@@ -600,5 +616,38 @@ mod tests {
             .matched("mail", "1")
             .unresolved("safari")
             .pending_empty();
+    }
+
+    #[test]
+    fn normalized_app_suffix_is_an_exact_title_match() {
+        Scenario::new()
+            .live("main", App::Code, "main.rs — Code")
+            .on("8")
+            .live("lib", App::Code, "lib.rs — Code")
+            .on("9")
+            .workspace("1", |ws| ws.wants(App::Code, "main.rs"))
+            .workspace("2", |ws| ws.wants(App::Code, "lib.rs"))
+            .resolve()
+            .matched("main", "1")
+            .matched("lib", "2")
+            .pending_empty()
+            .unresolved_empty();
+    }
+
+    #[test]
+    fn untitled_windows_of_the_same_app_bind_by_count() {
+        Scenario::new()
+            .live("first", App::Terminal, "zsh")
+            .on("8")
+            .live("second", App::Terminal, "bash")
+            .on("9")
+            .workspace("3", |ws| {
+                ws.wants_app(App::Terminal).wants_app(App::Terminal)
+            })
+            .resolve()
+            .matched("first", "3")
+            .matched("second", "3")
+            .pending_empty()
+            .unresolved_empty();
     }
 }

@@ -1,34 +1,42 @@
 use crate::{
     aerospace::AerospaceWindow,
     restore::{
-        rule::WindowResolverRule,
-        types::{ResolveTarget, ResolvedWindowMatch, present_text},
+        rule::{Candidate, WindowResolverRule},
+        title::normalize_title,
+        types::{ResolveTarget, present_text},
     },
 };
+
+fn comparable_title(title: &str, app_name: &str) -> String {
+    normalize_title(title, app_name).to_lowercase()
+}
+
+fn target_comparable_title(target: &ResolveTarget<'_>) -> Option<String> {
+    let title = present_text(target.target_window.title.as_deref())?;
+    let app = target.target_window.app.as_deref().unwrap_or("");
+    let comparable = comparable_title(title, app);
+    present_text(Some(&comparable)).map(str::to_string)
+}
 
 pub struct TitleMatchResolverRule {}
 
 impl WindowResolverRule for TitleMatchResolverRule {
-    fn match_window(
-        &self,
-        windows: &[AerospaceWindow],
-        target: &ResolveTarget,
-    ) -> Option<ResolvedWindowMatch> {
-        let target_title = present_text(target.target_window.title.as_deref())?;
-        let target_title_lowercase = target_title.to_lowercase();
+    fn propose(&self, windows: &[AerospaceWindow], target: &ResolveTarget<'_>) -> Vec<Candidate> {
+        let Some(target_title) = target_comparable_title(target) else {
+            return Vec::new();
+        };
 
-        let mut matches = windows
+        windows
             .iter()
             .filter(|window| target.matches_window_app(window))
-            .filter(|window| window.window_title.to_lowercase() == target_title_lowercase);
-
-        match (matches.next(), matches.next()) {
-            (Some(first_match), None) => Some(ResolvedWindowMatch {
-                target_workspace: target.target_workspace.name.clone(),
-                window_id: first_match.window_id,
-            }),
-            _ => None,
-        }
+            .filter(|window| {
+                comparable_title(&window.window_title, &window.app_name) == target_title
+            })
+            .map(|window| Candidate {
+                window_id: window.window_id,
+                score: 1.0,
+            })
+            .collect()
     }
 }
 
@@ -37,39 +45,32 @@ pub struct TitleSimilarityResolverRule {
 }
 
 impl WindowResolverRule for TitleSimilarityResolverRule {
-    fn match_window(
-        &self,
-        windows: &[AerospaceWindow],
-        target: &ResolveTarget,
-    ) -> Option<ResolvedWindowMatch> {
-        let target_title = present_text(target.target_window.title.as_deref())?;
+    fn propose(&self, windows: &[AerospaceWindow], target: &ResolveTarget<'_>) -> Vec<Candidate> {
+        let Some(target_title) = target_comparable_title(target) else {
+            return Vec::new();
+        };
 
-        let target_title_lowercase = target_title.to_lowercase();
-
-        let ranked_matches: Vec<&AerospaceWindow> = windows
+        windows
             .iter()
             .filter(|window| target.matches_window_app(window))
-            .filter(|window| {
-                strsim::normalized_levenshtein(
-                    &target_title_lowercase,
-                    &window.window_title.to_lowercase(),
-                ) >= self.threshold
+            .filter_map(|window| {
+                let score = strsim::normalized_levenshtein(
+                    &target_title,
+                    &comparable_title(&window.window_title, &window.app_name),
+                );
+                (score >= self.threshold).then_some(Candidate {
+                    window_id: window.window_id,
+                    score,
+                })
             })
-            .collect();
-
-        match ranked_matches.as_slice() {
-            [first_match] => Some(ResolvedWindowMatch {
-                target_workspace: target.target_workspace.name.clone(),
-                window_id: first_match.window_id,
-            }),
-            _ => None,
-        }
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::restore::types::{ResolveTarget, ResolvedWindowMatch};
     use crate::stage::{StageWindow, StageWorkspace};
 
     fn create_target(
@@ -249,6 +250,40 @@ mod test {
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);
+        assert_eq!(resolver.propose(&windows, &target).len(), 2);
+    }
+
+    #[test]
+    fn test_title_match_ignores_app_name_suffix() {
+        let (target_window, target_workspace) = create_target(
+            "Code",
+            "com.microsoft.VSCode",
+            Some("main.rs"),
+            "workspace-1",
+        );
+        let target = ResolveTarget {
+            target_window: &target_window,
+            target_workspace: &target_workspace,
+        };
+
+        let windows = vec![
+            AerospaceWindow::dummy()
+                .with_window_id(1)
+                .with_app_name("Code")
+                .with_bundle_id("com.microsoft.VSCode")
+                .with_window_title("main.rs — Code"),
+        ];
+
+        let resolver = TitleMatchResolverRule {};
+        let result = resolver.match_window(&windows, &target);
+
+        assert_eq!(
+            result,
+            Some(ResolvedWindowMatch {
+                target_workspace: "workspace-1".to_string(),
+                window_id: 1,
+            })
+        );
     }
 
     // ==========================================
@@ -394,5 +429,6 @@ mod test {
         let result = resolver.match_window(&windows, &target);
 
         assert_eq!(result, None);
+        assert_eq!(resolver.propose(&windows, &target).len(), 2);
     }
 }
