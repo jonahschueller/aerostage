@@ -2,16 +2,38 @@ use std::collections::{HashMap, HashSet};
 
 use crate::aerospace::AerospaceWindowId;
 
+/// Position of a staged window in the restore target list.
+type TargetIndex = usize;
+
+/// Similarity of one staged window to one live window.
+type MatchScore = f64;
+
+/// A staged target paired with one live window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct TargetWindow {
+    target_index: TargetIndex,
+    window_id: AerospaceWindowId,
+}
+
+impl From<&ScoredPair> for TargetWindow {
+    fn from(pair: &ScoredPair) -> Self {
+        Self {
+            target_index: pair.target_index,
+            window_id: pair.window_id,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScoredPair {
-    pub target_index: usize,
+    pub target_index: TargetIndex,
     pub window_id: AerospaceWindowId,
-    pub score: f64,
+    pub score: MatchScore,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assignment {
-    pub target_index: usize,
+    pub target_index: TargetIndex,
     pub window_id: AerospaceWindowId,
 }
 
@@ -19,18 +41,18 @@ pub struct Assignment {
 /// Equal scores still assign (stable), so duplicate titles bind in order rather than
 /// remaining unmatched.
 pub fn assign_unique_best(pairs: impl IntoIterator<Item = ScoredPair>) -> Vec<Assignment> {
-    let mut best: HashMap<(usize, AerospaceWindowId), f64> = HashMap::new();
+    let mut best: HashMap<TargetWindow, MatchScore> = HashMap::new();
     for pair in pairs {
-        best.entry((pair.target_index, pair.window_id))
+        best.entry(TargetWindow::from(&pair))
             .and_modify(|score| *score = score.max(pair.score))
             .or_insert(pair.score);
     }
 
     let mut ranked: Vec<ScoredPair> = best
         .into_iter()
-        .map(|((target_index, window_id), score)| ScoredPair {
-            target_index,
-            window_id,
+        .map(|(target_window, score)| ScoredPair {
+            target_index: target_window.target_index,
+            window_id: target_window.window_id,
             score,
         })
         .collect();
