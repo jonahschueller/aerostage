@@ -8,7 +8,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::{
     aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler,
-    stage::repository::normalize_stage_filepath,
+    common::parse_workspace_list, stage::repository::normalize_stage_filepath,
 };
 
 pub struct CaptureCommandHandler {
@@ -17,14 +17,6 @@ pub struct CaptureCommandHandler {
     pub workspaces: Option<String>,
     pub default_workspace: Option<String>,
     pub stdout_output: bool,
-}
-
-pub(crate) fn parse_workspace_list(workspaces: &str) -> Vec<&str> {
-    workspaces
-        .split(',')
-        .map(str::trim)
-        .filter(|workspace| !workspace.is_empty())
-        .collect()
 }
 
 pub(crate) fn resolve_captured_stage_name<'a>(
@@ -116,12 +108,6 @@ impl CommandHandler for CaptureCommandHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_workspace_list_trims_and_drops_empty_entries() {
-        assert_eq!(parse_workspace_list("1, 2, 3"), vec!["1", "2", "3"]);
-        assert_eq!(parse_workspace_list("1,,2,"), vec!["1", "2"]);
-    }
 
     #[test]
     fn resolve_captured_stage_name_prefers_explicit_name() {

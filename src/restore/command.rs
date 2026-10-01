@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    aerospace::Aerospace, cli::CommandHandler, config::Config, restore::restore::StageRestorer,
-    stage::repository::StageRepository,
+    aerospace::Aerospace, cli::CommandHandler, common::parse_workspace_list, config::Config,
+    restore::restore::StageRestorer, stage::repository::StageRepository,
 };
 
 pub struct RestoreCommandHandler {
     pub stage: Option<String>,
+    pub workspaces: Option<String>,
 }
 
 impl CommandHandler for RestoreCommandHandler {
@@ -21,8 +22,10 @@ impl CommandHandler for RestoreCommandHandler {
 
         let stage_restorer = StageRestorer::new(&aerospace, &stage_file.stage);
 
+        let workspaces = self.workspaces.as_deref().map(parse_workspace_list);
+
         stage_restorer
-            .restore_stage()
+            .restore_stage(workspaces.as_deref())
             .with_context(|| format!("Failed to restore stage '{}'", &stage_name))?;
 
         Ok(())
