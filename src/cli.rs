@@ -43,6 +43,8 @@ pub struct CaptureArgs {
 #[derive(Args, Debug)]
 pub struct RestoreArgs {
     pub stage: Option<String>,
+    #[arg(long)]
+    pub workspaces: Option<String>,
 }
 
 #[derive(Args, Debug)]

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    aerospace::Aerospace, cli::CommandHandler, config::Config, restore::restore::restore_stage,
+    aerospace::Aerospace, cli::CommandHandler, config::Config, restore::restore::StageRestorer,
     stage::repository::StageRepository,
 };
 
@@ -19,7 +19,10 @@ impl CommandHandler for RestoreCommandHandler {
         let stage_file = StageRepository::load_from_file(&stage_path)
             .with_context(|| "Failed to load stage from file.")?;
 
-        restore_stage(&aerospace, &stage_file.stage)
+        let stage_restorer = StageRestorer::new(&aerospace, &stage_file.stage);
+
+        stage_restorer
+            .restore_stage()
             .with_context(|| format!("Failed to restore stage '{}'", &stage_name))?;
 
         Ok(())

@@ -128,32 +128,43 @@ impl RestorePlan {
     }
 }
 
-pub fn restore_stage(aerospace: &Aerospace, stage: &Stage) -> Result<()> {
-    let live_windows = aerospace.list_windows()?;
+pub struct StageRestorer<'a> {
+    aerospace: &'a Aerospace,
+    stage: &'a Stage,
+}
 
-    let resolution = WindowResolution::resolve(stage, &live_windows);
-
-    let restore_plan = RestorePlan::resolve(&stage.workspaces, &resolution, &live_windows);
-    restore_plan.restore(aerospace)?;
-
-    for target in resolution.pending_targets {
-        let window = target.target_window;
-        eprintln!(
-            "Could not restore window {} | {} | {}",
-            window.title.as_deref().unwrap_or("-"),
-            window.app.as_deref().unwrap_or("-"),
-            window.bundle_id.as_deref().unwrap_or("-"),
-        )
+impl<'a> StageRestorer<'a> {
+    pub fn new(aerospace: &'a Aerospace, stage: &'a Stage) -> Self {
+        Self { aerospace, stage }
     }
 
-    Ok(())
+    pub fn restore_stage(&self) -> Result<()> {
+        let live_windows = self.aerospace.list_windows()?;
+
+        let resolution = WindowResolution::resolve(self.stage, &live_windows);
+
+        let restore_plan = RestorePlan::resolve(&self.stage.workspaces, &resolution, &live_windows);
+        restore_plan.restore(self.aerospace)?;
+
+        for target in resolution.pending_targets {
+            let window = target.target_window;
+            eprintln!(
+                "Could not restore window {} | {} | {}",
+                window.title.as_deref().unwrap_or("-"),
+                window.app.as_deref().unwrap_or("-"),
+                window.bundle_id.as_deref().unwrap_or("-"),
+            )
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        restore::{resolution::WindowResolution, rules::workspace, types::ResolvedWindowMatch},
+        restore::{resolution::WindowResolution, types::ResolvedWindowMatch},
         stage::StageWorkspaceLayout,
     };
 
