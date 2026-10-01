@@ -7,7 +7,7 @@ use crate::{
 
 pub struct RestoreCommandHandler {
     pub stage: Option<String>,
-    pub workspaces: Option<String>,
+    pub from_workspaces: Option<String>,
 }
 
 impl CommandHandler for RestoreCommandHandler {
@@ -22,10 +22,10 @@ impl CommandHandler for RestoreCommandHandler {
 
         let stage_restorer = StageRestorer::new(&aerospace, &stage_file.stage);
 
-        let workspaces = self.workspaces.as_deref().map(parse_workspace_list);
+        let source_workspaces = self.from_workspaces.as_deref().map(parse_workspace_list);
 
         stage_restorer
-            .restore_stage(workspaces.as_deref())
+            .restore_stage(source_workspaces.as_deref())
             .with_context(|| format!("Failed to restore stage '{}'", &stage_name))?;
 
         Ok(())

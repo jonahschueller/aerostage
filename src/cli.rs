@@ -44,7 +44,7 @@ pub struct CaptureArgs {
 pub struct RestoreArgs {
     pub stage: Option<String>,
     #[arg(long)]
-    pub workspaces: Option<String>,
+    pub from_workspaces: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -62,7 +62,7 @@ impl From<RestoreArgs> for RestoreCommandHandler {
     fn from(args: RestoreArgs) -> Self {
         RestoreCommandHandler {
             stage: args.stage,
-            workspaces: args.workspaces,
+            from_workspaces: args.from_workspaces,
         }
     }
 }

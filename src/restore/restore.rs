@@ -138,12 +138,14 @@ impl<'a> StageRestorer<'a> {
         Self { aerospace, stage }
     }
 
-    pub fn restore_stage(&self, workspaces: Option<&[&str]>) -> Result<()> {
+    pub fn restore_stage(&self, source_workspaces: Option<&[&str]>) -> Result<()> {
         let live_windows: Vec<_> = self
             .aerospace
             .list_windows()?
             .into_iter()
-            .filter(|window| workspaces.is_none_or(|ws| ws.iter().any(|w| w == &window.workspace)))
+            .filter(|window| {
+                source_workspaces.is_none_or(|ws| ws.iter().any(|w| w == &window.workspace))
+            })
             .collect();
 
         let resolution = WindowResolution::resolve(self.stage, &live_windows);
