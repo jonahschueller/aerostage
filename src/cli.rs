@@ -15,7 +15,10 @@ pub trait CommandHandler {
 }
 
 #[derive(Parser)]
-#[command(name = "aerostage")]
+#[command(
+    name = "aerostage",
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("AEROSTAGE_GIT_SHA"), ")")
+)]
 #[command(about = "Captures and restores aerospace workspace states", long_about = None)]
 pub struct Cli {
     #[arg(long)]
