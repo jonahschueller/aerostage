@@ -10,13 +10,20 @@ It talks to the [AeroSpace](https://github.com/nikitabobko/AeroSpace) CLI. It do
 
 ## Install
 
-Download the archive for your Mac from the [latest release](https://github.com/jonahschueller/aerostage/releases/latest). Extract it and put the `aerostage` binary somewhere on your `PATH`.
-
-To build from source instead:
+Install AeroStage with Homebrew:
 
 ```sh
-cargo install --path .
+brew install jonahschueller/tap/aerostage
 ```
+
+A Homebrew install makes `aerostage` available on the PATH AeroSpace uses, so you can call it directly from your AeroSpace config. For example:
+
+```toml
+[mode.main.binding]
+alt-shift-s = 'exec-and-forget aerostage restore work'
+```
+
+You can build from source with `cargo install --path .`, but a custom install may not be on AeroSpace's PATH. In that case, see [AeroSpace's exec environment variables guide](https://nikitabobko.github.io/AeroSpace/guide#exec-env-vars) to configure its PATH.
 
 ## Commands
 
