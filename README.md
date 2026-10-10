@@ -4,59 +4,52 @@ AeroStage saves AeroSpace window-to-workspace assignments and puts them back lat
 
 It talks to the [AeroSpace](https://github.com/nikitabobko/AeroSpace) CLI. It does not replace AeroSpace.
 
-> [!WARNING]
-> AeroStage is under active development. The CLI, stage format, and matching
-> rules can still change, and there is no migration path yet. Treat this as a
-> beta: useful, but not a stable contract. 
-
 ## Requirements
 
 - [AeroSpace](https://github.com/nikitabobko/AeroSpace) installed, with the `aerospace` binary on your `PATH`
-- Rust (to build from source)
 
 ## Install
 
+Install AeroStage with Homebrew:
+
 ```sh
-cargo install --path .
+brew install jonahschueller/tap/aerostage
 ```
 
-That puts `aerostage` on your path. A release build stores stages in `~/.aerostage/stages` (created on first run).
-
-`cargo run` uses a debug build, which writes stages into the current working directory instead.
-
-## Config
-
-If `~/.aerostage/config.toml` exists, AeroStage loads it. Pass `--config path` to use a different file.
-
-`default_stage` is the filename used when `capture`, `restore`, or `show` is run without one. It is joined with the stage directory, the same way an explicit filename is. When the key is missing, AeroStage uses `default.toml`.
+A Homebrew install makes `aerostage` available on the PATH AeroSpace uses, so you can call it directly from your AeroSpace config. For example:
 
 ```toml
-default_stage = "work.toml"
+[mode.main.binding]
+alt-shift-s = 'exec-and-forget aerostage restore work'
 ```
 
-`stage_directory` overrides the directory stage files are read from and written to.
+You can build from source with `cargo install --path .`, but a custom install may not be on AeroSpace's PATH. In that case, see [AeroSpace's exec environment variables guide](https://nikitabobko.github.io/AeroSpace/guide#exec-env-vars) to configure its PATH.
 
-## Stages
+## Commands
 
-A **stage** is a TOML snapshot of which windows belong on which workspace. Capture writes one from the live AeroSpace tree. You can also write or edit a stage by hand.
+AeroStage saves named **stages**: snapshots of which windows belong on which AeroSpace workspaces. Capture one after arranging your windows, then restore it later. Restore moves windows that are already open; it does not launch applications.
 
-A stage does **not** launch apps, change layouts, or bind workspaces to monitors. Restore only moves windows that are already open.
+```sh
+aerostage capture work
+aerostage restore work
+aerostage list
+aerostage show work
+```
 
-Typical uses:
-
-- Put windows back after a reboot
-- Switch between named setups (work, coding, …)
-- Keep a few stages for different monitor setups and restore the one you need
+- `capture [stage]` saves the current workspace arrangement. Omit the stage name to use the default stage. Use `--stdout` to print the stage instead of saving it.
+- `restore [stage]` restores a saved arrangement. Windows AeroStage cannot match are left where they are.
+- `list` shows the saved stages. Add `--json` for JSON output.
+- `show [stage]` prints a stage without restoring it.
 
 ## Capture
 
 ```sh
-aerostage capture work.toml
+aerostage capture work
 ```
 
-Writes the current assignment into `work.toml` in the stage directory. The stage's `name` is that filename, unless you pass `--name`.
+Saves the current assignment as `work.toml`. The stage's `name` is that filename, unless you pass `--name`.
 
-Omit the filename to write the default stage:
+Omit the stage name to write the default stage:
 
 ```sh
 aerostage capture
@@ -68,35 +61,43 @@ Print the stage to stdout instead of writing a file:
 aerostage capture --stdout
 ```
 
-`--stdout` cannot be combined with a filename. A stdout capture has no `name` unless you pass `--name`.
+`--stdout` cannot be combined with a stage name. A stdout capture has no `name` unless you pass `--name`.
 
 Capture only some workspaces:
 
 ```sh
-aerostage capture work.toml --workspaces 1,2,3
+aerostage capture work --workspaces 1,2,3
 ```
 
-`--workspaces` is a comma-separated list of AeroSpace workspace names. Spaces around names are ignored (`1, 2, 3` is the same as `1,2,3`).
+Capture also records each workspace's current layout. `--workspaces` takes a comma-separated list of AeroSpace workspace names. You can use `--default-workspace` to choose where leftover windows go when restoring:
+
+```sh
+aerostage capture work --default-workspace 1
+```
 
 ## Restore
 
 ```sh
-aerostage restore work.toml
+aerostage restore work
 ```
 
-Loads that file from the stage directory and moves matching windows onto the workspaces recorded in the stage.
+Loads `work.toml` and moves matching windows onto the workspaces recorded in the stage.
 
-Omit the filename to restore the default stage:
+Omit the stage name to restore the default stage:
 
 ```sh
 aerostage restore
 ```
 
-Windows that cannot be matched are left where they are. AeroStage prints a line for each of those on stderr.
+Windows that cannot be matched are left where they are. AeroStage prints a line for each of those on stderr. Use `--from-workspaces` to limit which current workspaces AeroStage looks in:
+
+```sh
+aerostage restore work --from-workspaces 1,2
+```
 
 ## Stage files
 
-Stages live next to each other as `.toml` files. A captured file looks like this:
+A stage is saved as a `.toml` file. You can edit it by hand; a captured file looks like this:
 
 ```toml
 name = "work.toml"
@@ -120,27 +121,29 @@ bundle_id = "com.microsoft.VSCode"
 
 Optional fields:
 
-| Field | Meaning |
-| --- | --- |
-| `description` | Free-text note. Capture leaves this empty. |
+| Field               | Meaning                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description`       | Free-text note. Capture leaves this empty.                                                                                                                                 |
 | `default_workspace` | If set, leftover live windows (ones the stage did not claim) are moved here. Windows that still look like they belong to an unmatched stage entry are left where they are. |
+| `workspace.layout`  | One of `h_tiles`, `v_tiles`, `h_accordion`, or `v_accordion`. Restore flattens the workspace tree, then applies this layout.                                               |
 
 You can drop `title`, `app`, or `bundle_id` when you edit a stage. Restore uses whatever is present to identify windows. If both `app` and `bundle_id` are set, a live window must match both.
 
-## How restore matches windows
+Capture records workspace assignments and layouts, but not window focus. Restore matches using app identity and title, then uses workspace and app identity to resolve remaining windows. If a match is ambiguous, or a stage entry has no matching open window, AeroStage leaves that window in place.
 
-Window ids change every launch, so restore scores open windows against each entry in the stage. It tries, in order:
+## More options
 
-1. Same app identity and the same title (case-insensitive exact match)
-2. Same app identity and a similar title (enough overlap to ignore small title changes), but only if exactly one remaining window is similar enough
-3. Same app identity, already on the target workspace, and only one such window
-4. Unique bundle id among remaining windows
-5. Unique app name among remaining windows
+You can also build from source with `cargo install --path .`.
 
-A rule only wins if it points at exactly one window. Ambiguous cases fall through to the next rule.
+## Configuration
 
-## Notes
+AeroStage works without configuration. To change the default stage or stage directory, create `~/.aerostage/config.toml` or pass another file with `--config path`:
 
-- Restore never starts applications. Open them first, then restore.
-- Capture records assignments only, not tiling layout or focus.
-- The filename you pass to `capture` / `restore` is joined with the stage directory. It is not a free-form path.
+```toml
+default_stage = "work.toml"
+stage_directory = "/path/to/stages"
+```
+
+Without a custom configuration, the default stage is `default.toml` and stages are stored in `~/.aerostage/stages`. The stage directory is created when saving a stage.
+
+When running with `cargo run`, stages are stored in the current working directory.
