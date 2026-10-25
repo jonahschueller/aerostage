@@ -91,14 +91,17 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliBackend<E> {
         .with_context(|| "Failed to execute list-workspaces.")
     }
 
-    // pub fn list_monitors(&self) -> Result<Vec<AerospaceMonitor>> {
-    //     let fields = self.aerospace_output_format(&["monitor-id", "monitor-name"]);
-    //     self.query_aerospace::<Vec<AerospaceMonitor>>(
-    //         &AerospaceCommand::ListMonitors,
-    //         &["--format", &fields],
-    //     )
-    //     .with_context(|| "Failed to execute list-monitors.")
-    // }
+    fn list_workspace_focused(&self) -> anyhow::Result<AerospaceWorkspace> {
+        let fields = format_aerospace(&["workspace", "workspace-root-container-layout"]);
+        self.query_aerospace::<Vec<AerospaceWorkspace>>(
+            &AerospaceCommand::ListWorkspaces,
+            &["--focused", "--format", &fields],
+        )
+        .context("Failed to execute list_workspace_focused.")?
+        .into_iter()
+        .next()
+        .context("Aerospace returned no focused workspace")
+    }
 
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
         let fields = format_aerospace(&[

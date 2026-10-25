@@ -52,7 +52,7 @@ impl Display for AerospaceLayout {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AerospaceWorkspace {
     pub workspace: AerospaceWorkspaceId,
     #[serde(rename = "workspace-root-container-layout")]

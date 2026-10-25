@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 
 use crate::aerospace::{
     AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
@@ -23,6 +23,13 @@ impl AerospaceBackend for MockAerospaceBackend {
 
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
         Ok(vec![])
+    }
+
+    fn list_workspace_focused(&self) -> Result<AerospaceWorkspace> {
+        Ok(AerospaceWorkspace {
+            workspace: "A".into(),
+            layout: AerospaceLayout::HAccordion,
+        })
     }
 
     fn move_node_to_workspace(
