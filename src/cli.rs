@@ -175,4 +175,23 @@ mod tests {
             _ => panic!("expected show command"),
         }
     }
+
+    #[test]
+    fn restore_accepts_focused_in_from_workspaces() {
+        let cli = Cli::try_parse_from([
+            "aerostage",
+            "restore",
+            "work",
+            "--from-workspaces",
+            "@focused,2",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Restore(args) => {
+                assert_eq!(args.from_workspaces.as_deref(), Some("@focused,2"));
+            }
+            _ => panic!("expected restore command"),
+        }
+    }
 }

@@ -38,6 +38,10 @@ impl Aerospace {
         self.backend.list_workspaces()
     }
 
+    pub fn list_workspace_focused(&self) -> Result<AerospaceWorkspace> {
+        self.backend.list_workspace_focused()
+    }
+
     pub fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
         self.backend.list_windows()
     }
