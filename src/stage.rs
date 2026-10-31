@@ -1,11 +1,12 @@
 use anyhow::{Context, Result, anyhow};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::BufWriter;
 use std::io::Write;
 
 use serde::{Deserialize, Serialize};
 
-use crate::aerospace::AerospaceWorkspaceId;
+use crate::aerospace::{AerospaceLayout, AerospaceWorkspaceId};
 
 pub mod commands;
 pub mod repository;
@@ -109,19 +110,39 @@ pub type UnresolvedStage = Stage<WorkspaceRef>;
 pub type UnresolvedStageWorkspace = StageWorkspace<WorkspaceRef>;
 
 impl UnresolvedStage {
+    /// Whether any workspace reference needs the focused workspace to resolve.
+    pub fn references_focused(&self) -> bool {
+        self.workspaces
+            .iter()
+            .map(|ws| &ws.name)
+            .chain(self.default_workspace.as_ref())
+            .any(|ws| *ws == WorkspaceRef::Focused)
+    }
+
     /// Resolves every workspace reference to a concrete workspace name.
+    ///
+    /// Workspaces that resolve to the same name (e.g. `@focused` and `"3"`
+    /// while workspace 3 is focused) are merged: the first occurrence keeps
+    /// its position and the windows are concatenated in stage order.
     pub fn resolve(self, focused: Option<&str>) -> Result<Stage> {
-        let workspaces = self
-            .workspaces
-            .into_iter()
-            .map(|ws| {
-                Ok(StageWorkspace {
-                    name: ws.name.resolve(focused)?,
-                    windows: ws.windows,
-                    layout: ws.layout,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let mut workspaces: Vec<StageWorkspace> = Vec::with_capacity(self.workspaces.len());
+        let mut workspace_indices: HashMap<AerospaceWorkspaceId, usize> = HashMap::new();
+
+        for ws in self.workspaces {
+            let name = ws.name.resolve(focused)?;
+
+            match workspace_indices.get(&name) {
+                Some(&index) => workspaces[index].merge(ws.windows, ws.layout)?,
+                None => {
+                    workspace_indices.insert(name.clone(), workspaces.len());
+                    workspaces.push(StageWorkspace {
+                        name,
+                        windows: ws.windows,
+                        layout: ws.layout,
+                    });
+                }
+            }
+        }
 
         let default_workspace = self
             .default_workspace
@@ -145,6 +166,30 @@ impl UnresolvedStage {
         writeln!(buffered, "{}", toml_stage)
             .with_context(|| "Failed to write context to output.")?;
 
+        Ok(())
+    }
+}
+
+impl StageWorkspace {
+    fn merge(
+        &mut self,
+        windows: Vec<StageWindow>,
+        layout: Option<StageWorkspaceLayout>,
+    ) -> Result<()> {
+        match (&self.layout, layout) {
+            (Some(current), Some(other)) if *current != other => {
+                return Err(anyhow!(
+                    "Workspace '{}' appears more than once with different layouts ('{}' and '{}').",
+                    self.name,
+                    AerospaceLayout::from(current.clone()),
+                    AerospaceLayout::from(other),
+                ));
+            }
+            (None, Some(other)) => self.layout = Some(other),
+            _ => {}
+        }
+
+        self.windows.extend(windows);
         Ok(())
     }
 }
@@ -330,5 +375,173 @@ name = "2"
     fn stage_with_focused_fails_to_resolve_without_focused_workspace() {
         let stage: UnresolvedStage = toml::from_str(FOCUSED_STAGE).unwrap();
         assert!(stage.resolve(None).is_err());
+    }
+
+    #[test]
+    fn stage_references_focused_in_workspace_or_default() {
+        let stage: UnresolvedStage = toml::from_str(FOCUSED_STAGE).unwrap();
+        assert!(stage.references_focused());
+
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "@focused"
+"#,
+        )
+        .unwrap();
+        assert!(stage.references_focused());
+
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+default_workspace = "@focused"
+
+[[workspace]]
+name = "1"
+"#,
+        )
+        .unwrap();
+        assert!(stage.references_focused());
+    }
+
+    #[test]
+    fn stage_without_focused_does_not_reference_focused() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+default_workspace = "1"
+
+[[workspace]]
+name = "2"
+"#,
+        )
+        .unwrap();
+        assert!(!stage.references_focused());
+    }
+
+    #[test]
+    fn stage_merges_focused_into_named_workspace() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "1"
+
+[[workspace]]
+name = "3"
+layout = "h_tiles"
+
+[[workspace.window]]
+app = "Code"
+
+[[workspace]]
+name = "@focused"
+
+[[workspace.window]]
+app = "Microsoft Teams"
+"#,
+        )
+        .unwrap();
+        let resolved = stage.resolve(Some("3")).unwrap();
+
+        assert_eq!(resolved.workspaces.len(), 2);
+        assert_eq!(resolved.workspaces[0].name, "1");
+
+        let merged = &resolved.workspaces[1];
+        assert_eq!(merged.name, "3");
+        assert_eq!(merged.layout, Some(StageWorkspaceLayout::HTiles));
+        let apps: Vec<_> = merged
+            .windows
+            .iter()
+            .map(|w| w.app.as_deref().unwrap())
+            .collect();
+        assert_eq!(apps, vec!["Code", "Microsoft Teams"]);
+    }
+
+    #[test]
+    fn stage_merge_takes_layout_from_later_workspace_if_first_has_none() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "@focused"
+
+[[workspace]]
+name = "3"
+layout = "v_accordion"
+"#,
+        )
+        .unwrap();
+        let resolved = stage.resolve(Some("3")).unwrap();
+
+        assert_eq!(resolved.workspaces.len(), 1);
+        assert_eq!(
+            resolved.workspaces[0].layout,
+            Some(StageWorkspaceLayout::VAccordion)
+        );
+    }
+
+    #[test]
+    fn stage_merge_accepts_matching_layouts() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "@focused"
+layout = "h_tiles"
+
+[[workspace]]
+name = "3"
+layout = "h_tiles"
+"#,
+        )
+        .unwrap();
+        let resolved = stage.resolve(Some("3")).unwrap();
+
+        assert_eq!(resolved.workspaces.len(), 1);
+        assert_eq!(
+            resolved.workspaces[0].layout,
+            Some(StageWorkspaceLayout::HTiles)
+        );
+    }
+
+    #[test]
+    fn stage_merge_fails_on_conflicting_layouts() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "3"
+layout = "h_tiles"
+
+[[workspace]]
+name = "@focused"
+layout = "v_tiles"
+"#,
+        )
+        .unwrap();
+        let error = stage.resolve(Some("3")).unwrap_err().to_string();
+
+        assert!(error.contains("'3'"), "{error}");
+        assert!(error.contains("h_tiles"), "{error}");
+        assert!(error.contains("v_tiles"), "{error}");
+    }
+
+    #[test]
+    fn stage_merges_duplicate_named_workspaces() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "2"
+
+[[workspace.window]]
+app = "Safari"
+
+[[workspace]]
+name = "2"
+
+[[workspace.window]]
+app = "Slack"
+"#,
+        )
+        .unwrap();
+        let resolved = stage.resolve(None).unwrap();
+
+        assert_eq!(resolved.workspaces.len(), 1);
+        assert_eq!(resolved.workspaces[0].windows.len(), 2);
     }
 }
