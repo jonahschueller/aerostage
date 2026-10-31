@@ -6,7 +6,7 @@ use std::{
 
 use thiserror::Error;
 
-use crate::{config::Config, stage::Stage};
+use crate::{config::Config, stage::UnresolvedStage};
 
 #[derive(Error, Debug)]
 pub enum StageRepositoryError {
@@ -67,14 +67,14 @@ pub fn normalize_stage_filepath(path: &Path) -> Result<PathBuf> {
 #[derive(Debug)]
 pub struct StageFile {
     pub path: PathBuf,
-    pub stage: Stage,
+    pub stage: UnresolvedStage,
 }
 
 pub struct StageRepository {}
 
 impl StageRepository {
     #[allow(dead_code)]
-    pub fn save_to_file<P: AsRef<Path>>(stage: Stage, path: P) -> Result<()> {
+    pub fn save_to_file<P: AsRef<Path>>(stage: UnresolvedStage, path: P) -> Result<()> {
         let path = normalize_stage_filepath(path.as_ref())?;
         let file = File::create(&path).map_err(|source| StageRepositoryError::CreateFile {
             path: path.to_path_buf(),
@@ -98,7 +98,7 @@ impl StageRepository {
                 source,
             })?;
 
-        let stage: Stage =
+        let stage: UnresolvedStage =
             toml::from_str(&content).map_err(|source| StageRepositoryError::Deserialize {
                 path: path.clone(),
                 source,
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn parses_workspace_without_windows() {
-        let stage: Stage = toml::from_str(
+        let stage: UnresolvedStage = toml::from_str(
             r#"
 name = "empty"
 

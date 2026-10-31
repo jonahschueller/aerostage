@@ -20,7 +20,13 @@ impl CommandHandler for RestoreCommandHandler {
         let stage_file = StageRepository::load_from_file(&stage_path)
             .with_context(|| "Failed to load stage from file.")?;
 
-        let stage_restorer = StageRestorer::new(&aerospace, &stage_file.stage);
+        // TODO(#30): pass the focused workspace once restore supports @focused.
+        let stage = stage_file
+            .stage
+            .resolve(None)
+            .with_context(|| format!("Failed to resolve stage '{}'", &stage_name))?;
+
+        let stage_restorer = StageRestorer::new(&aerospace, &stage);
 
         let source_workspaces = self.from_workspaces.as_deref().map(parse_workspace_list);
 

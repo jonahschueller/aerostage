@@ -5,17 +5,10 @@ use std::io::Write;
 
 use serde::{Deserialize, Serialize};
 
+use crate::aerospace::AerospaceWorkspaceId;
+
 pub mod commands;
 pub mod repository;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Stage {
-    pub name: Option<String>,
-    pub description: Option<String>,
-    #[serde(rename = "workspace", default)]
-    pub workspaces: Vec<StageWorkspace>,
-    pub default_workspace: Option<String>,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -86,8 +79,8 @@ impl WorkspaceRef {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StageWorkspace {
-    pub name: String,
+pub struct StageWorkspace<W = AerospaceWorkspaceId> {
+    pub name: W,
     #[serde(rename = "window", default)]
     pub windows: Vec<StageWindow>,
     pub layout: Option<StageWorkspaceLayout>,
@@ -100,7 +93,49 @@ pub struct StageWindow {
     pub bundle_id: Option<String>,
 }
 
-impl Stage {
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound(deserialize = "W: Deserialize<'de>"))]
+pub struct Stage<W = AerospaceWorkspaceId> {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "workspace", default)]
+    pub workspaces: Vec<StageWorkspace<W>>,
+    pub default_workspace: Option<W>,
+}
+
+/// A stage as stored on disk. Workspace names may reference `@focused` and
+/// must be resolved before they can be restored.
+pub type UnresolvedStage = Stage<WorkspaceRef>;
+pub type UnresolvedStageWorkspace = StageWorkspace<WorkspaceRef>;
+
+impl UnresolvedStage {
+    /// Resolves every workspace reference to a concrete workspace name.
+    pub fn resolve(self, focused: Option<&str>) -> Result<Stage> {
+        let workspaces = self
+            .workspaces
+            .into_iter()
+            .map(|ws| {
+                Ok(StageWorkspace {
+                    name: ws.name.resolve(focused)?,
+                    windows: ws.windows,
+                    layout: ws.layout,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let default_workspace = self
+            .default_workspace
+            .map(|ws| ws.resolve(focused))
+            .transpose()?;
+
+        Ok(Stage {
+            name: self.name,
+            description: self.description,
+            workspaces,
+            default_workspace,
+        })
+    }
+
     pub fn write(&self, writer: Box<dyn Write>) -> Result<()> {
         let toml_stage = toml::to_string_pretty(&self)
             .with_context(|| "Failed to convert stage to toml format.")?;
@@ -222,5 +257,78 @@ mod tests {
     #[test]
     fn workspace_ref_fails_to_resolve_focused_without_focused() {
         assert!(WorkspaceRef::Focused.resolve(None).is_err());
+    }
+
+    const FOCUSED_STAGE: &str = r#"
+name = "teams"
+default_workspace = "@focused"
+
+[[workspace]]
+name = "@focused"
+
+[[workspace.window]]
+app = "Microsoft Teams"
+
+[[workspace]]
+name = "2"
+layout = "h_tiles"
+"#;
+
+    #[test]
+    fn stage_parses_focused_workspace_references() {
+        let stage: UnresolvedStage = toml::from_str(FOCUSED_STAGE).unwrap();
+
+        assert_eq!(stage.name.as_deref(), Some("teams"));
+        assert_eq!(stage.default_workspace, Some(WorkspaceRef::Focused));
+        assert_eq!(stage.workspaces[0].name, WorkspaceRef::Focused);
+        assert_eq!(stage.workspaces[1].name, WorkspaceRef::Named("2".into()));
+    }
+
+    #[test]
+    fn stage_serializes_focused_workspace_as_token() {
+        let stage: UnresolvedStage = toml::from_str(FOCUSED_STAGE).unwrap();
+        let toml = toml::to_string(&stage).unwrap();
+
+        assert!(toml.contains(r#"default_workspace = "@focused""#));
+        assert!(toml.contains(r#"name = "@focused""#));
+    }
+
+    #[test]
+    fn stage_resolves_workspace_references() {
+        let stage: UnresolvedStage = toml::from_str(FOCUSED_STAGE).unwrap();
+        let resolved = stage.resolve(Some("5")).unwrap();
+
+        assert_eq!(resolved.name.as_deref(), Some("teams"));
+        assert_eq!(resolved.default_workspace.as_deref(), Some("5"));
+        assert_eq!(resolved.workspaces[0].name, "5");
+        assert_eq!(resolved.workspaces[0].windows.len(), 1);
+        assert_eq!(resolved.workspaces[1].name, "2");
+        assert_eq!(
+            resolved.workspaces[1].layout,
+            Some(StageWorkspaceLayout::HTiles)
+        );
+    }
+
+    #[test]
+    fn stage_without_focused_resolves_without_focused_workspace() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+default_workspace = "1"
+
+[[workspace]]
+name = "2"
+"#,
+        )
+        .unwrap();
+        let resolved = stage.resolve(None).unwrap();
+
+        assert_eq!(resolved.default_workspace.as_deref(), Some("1"));
+        assert_eq!(resolved.workspaces[0].name, "2");
+    }
+
+    #[test]
+    fn stage_with_focused_fails_to_resolve_without_focused_workspace() {
+        let stage: UnresolvedStage = toml::from_str(FOCUSED_STAGE).unwrap();
+        assert!(stage.resolve(None).is_err());
     }
 }
