@@ -95,6 +95,8 @@ Windows that cannot be matched are left where they are. AeroStage prints a line 
 aerostage restore work --from-workspaces 1,2
 ```
 
+Workspace names in a stage and in `--from-workspaces` can be `@focused`; see [Focused workspace](#focused-workspace).
+
 ## Stage files
 
 A stage is saved as a `.toml` file. You can edit it by hand; a captured file looks like this:
@@ -130,6 +132,38 @@ Optional fields:
 You can drop `title`, `app`, or `bundle_id` when you edit a stage. Restore uses whatever is present to identify windows. If both `app` and `bundle_id` are set, a live window must match both.
 
 Capture records workspace assignments and layouts, but not window focus. Restore matches using app identity and title, then uses workspace and app identity to resolve remaining windows. If a match is ambiguous, or a stage entry has no matching open window, AeroStage leaves that window in place.
+
+## Focused workspace
+
+Use `@focused` wherever a stage or restore takes a workspace name to mean the workspace that is focused when you run `restore`. The name matches AeroSpace's `list-workspaces --focused`.
+
+Bring an app to wherever you are:
+
+```toml
+[[workspace]]
+name = "@focused"
+
+[[workspace.window]]
+app = "Microsoft Teams"
+```
+
+Move every leftover window to the workspace you are looking at:
+
+```toml
+default_workspace = "@focused"
+```
+
+Restore only windows that are on the focused workspace:
+
+```sh
+aerostage restore work --from-workspaces @focused
+```
+
+You can also capture with `--default-workspace @focused`; the stage keeps `@focused` rather than the workspace that was focused during capture.
+
+Restore looks up the focused workspace once, before it moves any windows, and only if the stage or `--from-workspaces` uses `@focused`. If two workspace entries end up naming the same workspace (for example `@focused` and `"3"` while workspace 3 is focused), their windows are combined. If both entries set a `layout` and the layouts differ, restore stops with an error.
+
+`@focused` is reserved: a workspace in AeroSpace that is literally named `@focused` cannot be referenced from a stage.
 
 ## More options
 

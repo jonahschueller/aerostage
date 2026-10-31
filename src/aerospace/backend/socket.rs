@@ -219,6 +219,18 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
         .context("Failed to execute list-workspaces.")
     }
 
+    fn list_workspace_focused(&self) -> anyhow::Result<AerospaceWorkspace> {
+        let fields = format_aerospace(&["workspace", "workspace-root-container-layout"]);
+        self.query_command::<Vec<AerospaceWorkspace>>(
+            &AerospaceCommand::ListWorkspaces,
+            &["--focused", "--format", &fields],
+        )
+        .context("Failed to execute list_workspace_focused.")?
+        .into_iter()
+        .next()
+        .context("Aerospace returned no focused workspace")
+    }
+
     fn list_windows(&self) -> anyhow::Result<Vec<AerospaceWindow>> {
         let fields = format_aerospace(&[
             "window-id",
@@ -523,6 +535,39 @@ mod tests {
         assert_eq!(workspaces.len(), 1);
         assert_eq!(workspaces[0].workspace, "1");
         assert_eq!(workspaces[0].layout, AerospaceLayout::HTiles);
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn list_focused_workspace_sends_focused_and_format_flags() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success(
+                r#"[{
+                    "workspace": "1",
+                    "workspace-root-container-layout": "h_tiles"
+                }]"#,
+            );
+        });
+
+        let workspace = backend
+            .list_workspace_focused()
+            .expect("should parse listed focused workspace");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            [
+                "list-workspaces",
+                "--json",
+                "--focused",
+                "--format",
+                "%{workspace} %{workspace-root-container-layout}"
+            ]
+        );
+        assert_eq!(workspace.workspace, "1");
+        assert_eq!(workspace.layout, AerospaceLayout::HTiles);
         handle.join().expect("peer thread should finish");
     }
 

@@ -20,6 +20,7 @@ pub trait AerospaceBackend {
     fn list_apps(&self) -> Result<Vec<AerospaceApp>>;
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>>;
     fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>>;
+    fn list_workspace_focused(&self) -> Result<AerospaceWorkspace>;
     fn move_node_to_workspace(
         &self,
         workspace: &AerospaceWorkspaceId,

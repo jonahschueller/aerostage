@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::{
-    aerospace::{Aerospace, AerospaceLayout, AerospaceWindow, AerospaceWindowId},
+    aerospace::{
+        Aerospace, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId,
+    },
     restore::resolution::WindowResolution,
     stage::{Stage, StageWorkspace},
 };
@@ -138,7 +140,7 @@ impl<'a> StageRestorer<'a> {
         Self { aerospace, stage }
     }
 
-    pub fn restore_stage(&self, source_workspaces: Option<&[&str]>) -> Result<()> {
+    pub fn restore_stage(&self, source_workspaces: Option<&[AerospaceWorkspaceId]>) -> Result<()> {
         let live_windows: Vec<_> = self
             .aerospace
             .list_windows()?

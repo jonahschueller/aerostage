@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Context, Result};
 
 use crate::aerospace::Aerospace;
-use crate::stage::{Stage, StageWindow, StageWorkspace};
+use crate::stage::{StageWindow, UnresolvedStage, UnresolvedStageWorkspace, WorkspaceRef};
 
 pub struct StageCapturer<'a> {
     pub aerospace: &'a Aerospace,
@@ -40,7 +40,7 @@ impl<'a> StageCapturer<'a> {
         name: Option<&str>,
         target_workspaces: Option<&[&str]>,
         default_workspace: Option<&str>,
-    ) -> Result<Stage> {
+    ) -> Result<UnresolvedStage> {
         let aerospace_workspaces = self
             .aerospace
             .list_workspaces()
@@ -51,7 +51,7 @@ impl<'a> StageCapturer<'a> {
         let workspace_filter_set: Option<HashSet<&str>> =
             target_workspaces.map(|ws| ws.iter().copied().collect());
 
-        let workspaces: Vec<StageWorkspace> = aerospace_workspaces
+        let workspaces: Vec<UnresolvedStageWorkspace> = aerospace_workspaces
             .into_iter()
             .filter(|ws| {
                 workspace_filter_set
@@ -60,19 +60,50 @@ impl<'a> StageCapturer<'a> {
             })
             .filter_map(|ws| {
                 let windows = windows_by_workspace.remove(ws.workspace.as_str())?;
-                Some(StageWorkspace {
-                    name: ws.workspace,
+                Some(UnresolvedStageWorkspace {
+                    name: WorkspaceRef::Named(ws.workspace),
                     windows,
                     layout: Some(ws.layout.into()),
                 })
             })
             .collect();
 
-        Ok(Stage {
+        Ok(UnresolvedStage {
             name: name.map(String::from),
             description: None,
             workspaces,
-            default_workspace: default_workspace.map(|s| s.to_string()),
+            default_workspace: default_workspace.map(WorkspaceRef::from),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_keeps_focused_default_workspace_as_token() {
+        let aerospace = Aerospace::mock();
+        let stage = StageCapturer::new(&aerospace)
+            .capture(Some("work"), None, Some("@focused"))
+            .unwrap();
+
+        assert_eq!(stage.default_workspace, Some(WorkspaceRef::Focused));
+
+        let toml = toml::to_string(&stage).unwrap();
+        assert!(toml.contains(r#"default_workspace = "@focused""#), "{toml}");
+    }
+
+    #[test]
+    fn capture_keeps_named_default_workspace() {
+        let aerospace = Aerospace::mock();
+        let stage = StageCapturer::new(&aerospace)
+            .capture(Some("work"), None, Some("1"))
+            .unwrap();
+
+        assert_eq!(
+            stage.default_workspace,
+            Some(WorkspaceRef::Named("1".into()))
+        );
     }
 }
