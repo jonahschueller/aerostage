@@ -76,3 +76,34 @@ impl<'a> StageCapturer<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_keeps_focused_default_workspace_as_token() {
+        let aerospace = Aerospace::mock();
+        let stage = StageCapturer::new(&aerospace)
+            .capture(Some("work"), None, Some("@focused"))
+            .unwrap();
+
+        assert_eq!(stage.default_workspace, Some(WorkspaceRef::Focused));
+
+        let toml = toml::to_string(&stage).unwrap();
+        assert!(toml.contains(r#"default_workspace = "@focused""#), "{toml}");
+    }
+
+    #[test]
+    fn capture_keeps_named_default_workspace() {
+        let aerospace = Aerospace::mock();
+        let stage = StageCapturer::new(&aerospace)
+            .capture(Some("work"), None, Some("1"))
+            .unwrap();
+
+        assert_eq!(
+            stage.default_workspace,
+            Some(WorkspaceRef::Named("1".into()))
+        );
+    }
+}

@@ -11,6 +11,13 @@ pub struct Aerospace {
 }
 
 impl Aerospace {
+    #[cfg(test)]
+    pub fn mock() -> Self {
+        Self {
+            backend: Box::new(crate::aerospace::backend::mock::MockAerospaceBackend::new()),
+        }
+    }
+
     pub fn connect() -> Result<Self> {
         match AerospaceSocketBackend::with_aerospace_socket().and_then(|be| be.do_handshake()) {
             Ok(socket) => Ok(Self {
