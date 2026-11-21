@@ -173,7 +173,10 @@ impl<'a> StageRestorer<'a> {
 mod tests {
     use super::*;
     use crate::{
-        restore::{resolution::WindowResolution, types::ResolvedWindowMatch},
+        restore::{
+            resolution::WindowResolution,
+            types::{MatchOrigin, ResolvedWindowMatch},
+        },
         stage::StageWorkspaceLayout,
     };
 
@@ -194,10 +197,12 @@ mod tests {
                 ResolvedWindowMatch {
                     target_workspace: "1".into(),
                     window_id: 1,
+                    origin: MatchOrigin::StageWindow(0),
                 },
                 ResolvedWindowMatch {
                     target_workspace: "2".into(),
                     window_id: 2,
+                    origin: MatchOrigin::StageWindow(1),
                 },
             ],
             pending_targets: Vec::new(),

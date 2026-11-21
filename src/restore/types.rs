@@ -28,10 +28,20 @@ impl<'a> ResolveTarget<'a> {
     }
 }
 
+/// Position of a window in stage order, across all workspaces.
+pub type StageWindowIndex = usize;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MatchOrigin {
+    StageWindow(StageWindowIndex),
+    DefaultWorkspace,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedWindowMatch {
     pub target_workspace: AerospaceWorkspaceId,
     pub window_id: AerospaceWindowId,
+    pub origin: MatchOrigin,
 }
 
 #[derive(Debug)]
