@@ -27,7 +27,7 @@ impl WindowResolverRule for TargetWorkspaceResolverRule {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::restore::types::{ResolveTarget, ResolvedWindowMatch};
+    use crate::restore::types::ResolveTarget;
     use crate::stage::{StageWindow, StageWorkspace};
 
     // Helper to construct a standard ResolveTarget quickly
@@ -74,13 +74,7 @@ mod test {
         let resolver = TargetWorkspaceResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "work".to_string(),
-                window_id: 100,
-            })
-        );
+        assert_eq!(result, Some(100));
     }
 
     #[test]

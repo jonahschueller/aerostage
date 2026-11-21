@@ -70,7 +70,7 @@ impl WindowResolverRule for TitleSimilarityResolverRule {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::restore::types::{ResolveTarget, ResolvedWindowMatch};
+    use crate::restore::types::ResolveTarget;
     use crate::stage::{StageWindow, StageWorkspace};
 
     fn create_target(
@@ -115,13 +115,7 @@ mod test {
         let resolver = TitleMatchResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "workspace-1".to_string(),
-                window_id: 1,
-            })
-        );
+        assert_eq!(result, Some(1));
     }
 
     #[test]
@@ -148,13 +142,7 @@ mod test {
         let resolver = TitleMatchResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "workspace-1".to_string(),
-                window_id: 1,
-            })
-        );
+        assert_eq!(result, Some(1));
     }
 
     #[test]
@@ -277,13 +265,7 @@ mod test {
         let resolver = TitleMatchResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "workspace-1".to_string(),
-                window_id: 1,
-            })
-        );
+        assert_eq!(result, Some(1));
     }
 
     // ==========================================
@@ -321,13 +303,7 @@ mod test {
         let resolver = TitleSimilarityResolverRule { threshold: 0.6 };
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "work".to_string(),
-                window_id: 20,
-            })
-        );
+        assert_eq!(result, Some(20));
     }
 
     #[test]
