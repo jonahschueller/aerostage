@@ -1,5 +1,5 @@
 use super::resolution::WindowResolution;
-use super::types::ResolvedWindowMatch;
+use super::types::{MatchOrigin, ResolvedWindowMatch};
 use crate::aerospace::AerospaceWindow;
 use crate::stage::{Stage, StageWindow, StageWorkspace};
 
@@ -242,15 +242,7 @@ impl ScenarioResult {
     }
 
     fn is_fallback(&self, matched: &ResolvedWindowMatch) -> bool {
-        let Some(default) = self.stage.default_workspace.as_deref() else {
-            return false;
-        };
-        matched.target_workspace == default
-            && !self
-                .stage
-                .workspaces
-                .iter()
-                .any(|workspace| workspace.name == matched.target_workspace)
+        matched.origin == MatchOrigin::DefaultWorkspace
     }
 
     fn dump(&self) -> String {

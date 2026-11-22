@@ -104,6 +104,19 @@ pub struct Stage<W = AerospaceWorkspaceId> {
     pub default_workspace: Option<W>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StageWindowLocation {
+    pub workspace_index: usize,
+    pub window_index: usize,
+}
+
+#[derive(Debug)]
+pub struct ResolvedStage {
+    pub stage: Stage,
+    /// One location per window, in stage order.
+    pub window_locations: Vec<StageWindowLocation>,
+}
+
 /// A stage as stored on disk. Workspace names may reference `@focused` and
 /// must be resolved before they can be restored.
 pub type UnresolvedStage = Stage<WorkspaceRef>;
@@ -125,14 +138,28 @@ impl UnresolvedStage {
     /// while workspace 3 is focused) are merged: the first occurrence keeps
     /// its position and the windows are concatenated in stage order.
     pub fn resolve(self, focused: Option<&str>) -> Result<Stage> {
+        self.resolve_with_locations(focused)
+            .map(|resolved| resolved.stage)
+    }
+
+    pub fn resolve_with_locations(self, focused: Option<&str>) -> Result<ResolvedStage> {
         let mut workspaces: Vec<StageWorkspace> = Vec::with_capacity(self.workspaces.len());
+        let mut locations: Vec<Vec<StageWindowLocation>> =
+            Vec::with_capacity(self.workspaces.len());
         let mut workspace_indices: HashMap<AerospaceWorkspaceId, usize> = HashMap::new();
 
-        for ws in self.workspaces {
+        for (workspace_index, ws) in self.workspaces.into_iter().enumerate() {
             let name = ws.name.resolve(focused)?;
+            let window_locations = (0..ws.windows.len()).map(|window_index| StageWindowLocation {
+                workspace_index,
+                window_index,
+            });
 
             match workspace_indices.get(&name) {
-                Some(&index) => workspaces[index].merge(ws.windows, ws.layout)?,
+                Some(&index) => {
+                    workspaces[index].merge(ws.windows, ws.layout)?;
+                    locations[index].extend(window_locations);
+                }
                 None => {
                     workspace_indices.insert(name.clone(), workspaces.len());
                     workspaces.push(StageWorkspace {
@@ -140,6 +167,7 @@ impl UnresolvedStage {
                         windows: ws.windows,
                         layout: ws.layout,
                     });
+                    locations.push(window_locations.collect());
                 }
             }
         }
@@ -149,11 +177,14 @@ impl UnresolvedStage {
             .map(|ws| ws.resolve(focused))
             .transpose()?;
 
-        Ok(Stage {
-            name: self.name,
-            description: self.description,
-            workspaces,
-            default_workspace,
+        Ok(ResolvedStage {
+            stage: Stage {
+                name: self.name,
+                description: self.description,
+                workspaces,
+                default_workspace,
+            },
+            window_locations: locations.into_iter().flatten().collect(),
         })
     }
 
@@ -453,6 +484,59 @@ app = "Microsoft Teams"
             .map(|w| w.app.as_deref().unwrap())
             .collect();
         assert_eq!(apps, vec!["Code", "Microsoft Teams"]);
+    }
+
+    #[test]
+    fn resolve_with_locations_tracks_windows_through_merges() {
+        let stage: UnresolvedStage = toml::from_str(
+            r#"
+[[workspace]]
+name = "@focused"
+
+[[workspace.window]]
+app = "Microsoft Teams"
+
+[[workspace]]
+name = "1"
+
+[[workspace.window]]
+app = "Safari"
+
+[[workspace]]
+name = "3"
+
+[[workspace.window]]
+app = "Code"
+
+[[workspace.window]]
+app = "Terminal"
+"#,
+        )
+        .unwrap();
+        let resolved = stage.resolve_with_locations(Some("3")).unwrap();
+
+        let apps: Vec<_> = resolved
+            .stage
+            .workspaces
+            .iter()
+            .flat_map(|ws| &ws.windows)
+            .map(|w| w.app.as_deref().unwrap())
+            .collect();
+        assert_eq!(apps, vec!["Microsoft Teams", "Code", "Terminal", "Safari"]);
+
+        let location = |workspace_index, window_index| StageWindowLocation {
+            workspace_index,
+            window_index,
+        };
+        assert_eq!(
+            resolved.window_locations,
+            vec![
+                location(0, 0),
+                location(2, 0),
+                location(2, 1),
+                location(1, 0)
+            ]
+        );
     }
 
     #[test]

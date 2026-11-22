@@ -47,7 +47,7 @@ impl WindowResolverRule for UniqueAppNameResolverRule {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::restore::types::{ResolveTarget, ResolvedWindowMatch};
+    use crate::restore::types::ResolveTarget;
     use crate::stage::{StageWindow, StageWorkspace};
 
     // Helper to construct a standard ResolveTarget quickly
@@ -88,13 +88,7 @@ mod test {
         let resolver = UniqueBundleIdResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "workspace-1".to_string(),
-                window_id: 10,
-            })
-        );
+        assert_eq!(result, Some(10));
     }
 
     #[test]
@@ -180,13 +174,7 @@ mod test {
         let resolver = UniqueAppNameResolverRule {};
         let result = resolver.match_window(&windows, &target);
 
-        assert_eq!(
-            result,
-            Some(ResolvedWindowMatch {
-                target_workspace: "main-space".to_string(),
-                window_id: 42,
-            })
-        );
+        assert_eq!(result, Some(42));
     }
 
     #[test]

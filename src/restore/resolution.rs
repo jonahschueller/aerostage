@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    aerospace::{AerospaceWindow, AerospaceWorkspaceId},
+    aerospace::{AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
     restore::{
         assign::{ScoredPair, assign_unique_best},
         rule::WindowResolverRule,
@@ -9,10 +9,27 @@ use crate::{
             TargetWorkspaceResolverRule, TitleMatchResolverRule, TitleSimilarityResolverRule,
             UniqueAppNameResolverRule, UniqueBundleIdResolverRule,
         },
-        types::{ResolveTarget, ResolvedWindowMatch, UnresolvedWindow},
+        types::{
+            MatchOrigin, ResolveTarget, ResolvedWindowMatch, StageWindowIndex, UnresolvedWindow,
+        },
     },
     stage::Stage,
 };
+
+struct PendingTarget<'a> {
+    index: StageWindowIndex,
+    target: ResolveTarget<'a>,
+}
+
+impl PendingTarget<'_> {
+    fn resolve_to(&self, window_id: AerospaceWindowId) -> ResolvedWindowMatch {
+        ResolvedWindowMatch {
+            target_workspace: self.target.target_workspace.name.clone(),
+            window_id,
+            origin: MatchOrigin::StageWindow(self.index),
+        }
+    }
+}
 
 struct WindowResolver {
     fallback_workspace: Option<AerospaceWorkspaceId>,
@@ -38,13 +55,13 @@ impl WindowResolver {
 
     fn apply_title_assignment(
         &self,
-        pending_targets: &mut Vec<ResolveTarget<'_>>,
+        pending_targets: &mut Vec<PendingTarget<'_>>,
         available_windows: &mut Vec<AerospaceWindow>,
     ) -> Vec<ResolvedWindowMatch> {
         let mut pairs = Vec::new();
-        for (target_index, target) in pending_targets.iter().enumerate() {
+        for (target_index, pending) in pending_targets.iter().enumerate() {
             for rule in &self.title_rules {
-                for candidate in rule.propose(available_windows, target) {
+                for candidate in rule.propose(available_windows, &pending.target) {
                     pairs.push(ScoredPair {
                         target_index,
                         window_id: candidate.window_id,
@@ -66,13 +83,7 @@ impl WindowResolver {
 
         let resolved = assignments
             .into_iter()
-            .map(|assigned| ResolvedWindowMatch {
-                target_workspace: pending_targets[assigned.target_index]
-                    .target_workspace
-                    .name
-                    .clone(),
-                window_id: assigned.window_id,
-            })
+            .map(|assigned| pending_targets[assigned.target_index].resolve_to(assigned.window_id))
             .collect();
 
         let mut remaining_targets = Vec::new();
@@ -89,7 +100,7 @@ impl WindowResolver {
 
     fn apply_unique_leftover_rules(
         &self,
-        pending_targets: &mut Vec<ResolveTarget<'_>>,
+        pending_targets: &mut Vec<PendingTarget<'_>>,
         available_windows: &mut Vec<AerospaceWindow>,
     ) -> Vec<ResolvedWindowMatch> {
         let mut resolved_matches = Vec::new();
@@ -99,19 +110,16 @@ impl WindowResolver {
 
             for rule in &self.leftover_rules {
                 let mut remaining_targets = Vec::new();
-                for target in pending_targets.drain(..) {
-                    let candidates = rule.propose(available_windows, &target);
+                for pending in pending_targets.drain(..) {
+                    let candidates = rule.propose(available_windows, &pending.target);
                     if candidates.len() != 1 {
-                        remaining_targets.push(target);
+                        remaining_targets.push(pending);
                         continue;
                     }
 
                     let window_id = candidates[0].window_id;
                     available_windows.retain(|window| window.window_id != window_id);
-                    resolved_matches.push(ResolvedWindowMatch {
-                        target_workspace: target.target_workspace.name.clone(),
-                        window_id,
-                    });
+                    resolved_matches.push(pending.resolve_to(window_id));
                 }
 
                 *pending_targets = remaining_targets;
@@ -130,25 +138,22 @@ impl WindowResolver {
     }
 
     fn apply_count_by_app(
-        pending_targets: &mut Vec<ResolveTarget<'_>>,
+        pending_targets: &mut Vec<PendingTarget<'_>>,
         available_windows: &mut Vec<AerospaceWindow>,
     ) -> Vec<ResolvedWindowMatch> {
         let mut resolved_matches = Vec::new();
         let mut remaining_targets = Vec::new();
 
-        for target in pending_targets.drain(..) {
+        for pending in pending_targets.drain(..) {
             match available_windows
                 .iter()
-                .position(|window| target.matches_window_app(window))
+                .position(|window| pending.target.matches_window_app(window))
             {
                 Some(index) => {
                     let window = available_windows.remove(index);
-                    resolved_matches.push(ResolvedWindowMatch {
-                        target_workspace: target.target_workspace.name.clone(),
-                        window_id: window.window_id,
-                    });
+                    resolved_matches.push(pending.resolve_to(window.window_id));
                 }
-                None => remaining_targets.push(target),
+                None => remaining_targets.push(pending),
             }
         }
 
@@ -160,7 +165,7 @@ impl WindowResolver {
         &self,
         resolved_matches: &mut Vec<ResolvedWindowMatch>,
         available_windows: &mut Vec<AerospaceWindow>,
-        pending_targets: &[ResolveTarget<'_>],
+        pending_targets: &[PendingTarget<'_>],
     ) {
         let Some(fallback_workspace) = self.fallback_workspace.as_ref() else {
             return;
@@ -170,7 +175,7 @@ impl WindowResolver {
         available_windows.retain(|window| {
             if pending_targets
                 .iter()
-                .any(|target| target.matches_window_app(window))
+                .any(|pending| pending.target.matches_window_app(window))
             {
                 return true;
             }
@@ -178,6 +183,7 @@ impl WindowResolver {
             leftover_windows.push(ResolvedWindowMatch {
                 target_workspace: fallback_workspace.clone(),
                 window_id: window.window_id,
+                origin: MatchOrigin::DefaultWorkspace,
             });
             false
         });
@@ -194,7 +200,7 @@ impl WindowResolver {
         Vec<ResolveTarget<'a>>,
         Vec<UnresolvedWindow>,
     ) {
-        let mut pending_targets: Vec<ResolveTarget> = stage
+        let mut pending_targets: Vec<PendingTarget> = stage
             .workspaces
             .iter()
             .flat_map(|workspace| {
@@ -203,6 +209,8 @@ impl WindowResolver {
                     target_window: window,
                 })
             })
+            .enumerate()
+            .map(|(index, target)| PendingTarget { index, target })
             .collect();
 
         let mut available_windows = windows.to_vec();
@@ -227,6 +235,11 @@ impl WindowResolver {
             .map(|window| UnresolvedWindow {
                 window_id: window.window_id,
             })
+            .collect();
+
+        let pending_targets = pending_targets
+            .into_iter()
+            .map(|pending| pending.target)
             .collect();
 
         (resolved_matches, pending_targets, unresolved_windows)
@@ -254,5 +267,93 @@ impl<'a> WindowResolution<'a> {
             pending_targets,
             unresolved_windows,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stage::{StageWindow, StageWorkspace};
+
+    fn stage_window(app: &str, title: &str) -> StageWindow {
+        StageWindow {
+            app: Some(app.into()),
+            title: Some(title.into()),
+            bundle_id: None,
+        }
+    }
+
+    fn live_window(window_id: AerospaceWindowId, app: &str, title: &str) -> AerospaceWindow {
+        AerospaceWindow::dummy()
+            .with_window_id(window_id)
+            .with_app_name(app)
+            .with_window_title(title)
+    }
+
+    fn origin_of(resolution: &WindowResolution, window_id: AerospaceWindowId) -> MatchOrigin {
+        resolution
+            .resolved_windows
+            .iter()
+            .find(|matched| matched.window_id == window_id)
+            .map(|matched| matched.origin)
+            .expect("window should be resolved")
+    }
+
+    #[test]
+    fn origin_counts_stage_windows_across_workspaces() {
+        let stage = Stage {
+            name: None,
+            description: None,
+            workspaces: vec![
+                StageWorkspace {
+                    name: "1".into(),
+                    windows: vec![
+                        stage_window("Safari", "Inbox"),
+                        stage_window("Mail", "Today"),
+                    ],
+                    layout: None,
+                },
+                StageWorkspace {
+                    name: "2".into(),
+                    windows: vec![stage_window("Code", "aerostage")],
+                    layout: None,
+                },
+            ],
+            default_workspace: None,
+        };
+        let windows = vec![
+            live_window(10, "Code", "aerostage"),
+            live_window(11, "Mail", "Today"),
+            live_window(12, "Safari", "Inbox"),
+        ];
+
+        let resolution = WindowResolution::resolve(&stage, &windows);
+
+        assert_eq!(origin_of(&resolution, 12), MatchOrigin::StageWindow(0));
+        assert_eq!(origin_of(&resolution, 11), MatchOrigin::StageWindow(1));
+        assert_eq!(origin_of(&resolution, 10), MatchOrigin::StageWindow(2));
+    }
+
+    #[test]
+    fn origin_marks_leftover_windows_as_default_workspace() {
+        let stage = Stage {
+            name: None,
+            description: None,
+            workspaces: vec![StageWorkspace {
+                name: "1".into(),
+                windows: vec![stage_window("Safari", "Inbox")],
+                layout: None,
+            }],
+            default_workspace: Some("9".into()),
+        };
+        let windows = vec![
+            live_window(10, "Safari", "Inbox"),
+            live_window(11, "Finder", "Downloads"),
+        ];
+
+        let resolution = WindowResolution::resolve(&stage, &windows);
+
+        assert_eq!(origin_of(&resolution, 10), MatchOrigin::StageWindow(0));
+        assert_eq!(origin_of(&resolution, 11), MatchOrigin::DefaultWorkspace);
     }
 }
