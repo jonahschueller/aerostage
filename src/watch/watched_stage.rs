@@ -49,6 +49,19 @@ impl StageEntry {
         self.workspace = WorkspaceRef::Named(window.workspace.clone());
         true
     }
+
+    fn follow_title(&mut self, window: &AerospaceWindow) -> bool {
+        let tracked = self
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.title_tracked);
+        if !tracked || self.window.title.as_deref() == Some(window.window_title.as_str()) {
+            return false;
+        }
+
+        self.window.title = Some(window.window_title.clone());
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,7 +165,10 @@ impl WatchedStage {
 
             match live_by_id.get(&window_id) {
                 None => entry.binding = None,
-                Some(window) => changed |= entry.follow_workspace(window),
+                Some(window) => {
+                    changed |= entry.follow_workspace(window);
+                    changed |= entry.follow_title(window);
+                }
             }
         }
 
@@ -523,5 +539,32 @@ app = "Ghostty"
             watched.entries[2].workspace,
             WorkspaceRef::Named("2".into())
         );
+    }
+
+    #[test]
+    fn reconcile_follows_tracked_titles() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        assert!(watched.reconcile(&[live(10, "Safari", "Inbox", "1")]));
+
+        assert_eq!(watched.entries[0].window.title.as_deref(), Some("Inbox"));
+    }
+
+    #[test]
+    fn reconcile_keeps_pinned_titles() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs — Safari", "1")]);
+
+        assert!(!watched.reconcile(&[live(10, "Safari", "Inbox", "1")]));
+
+        assert_eq!(watched.entries[0].window.title.as_deref(), Some("Docs"));
+    }
+
+    #[test]
+    fn reconcile_leaves_entries_without_a_title_untitled() {
+        let mut watched = restored(vec![slack("5")]);
+
+        assert!(!watched.reconcile(&[slack("5")]));
+
+        assert_eq!(watched.entries[2].window.title, None);
     }
 }
