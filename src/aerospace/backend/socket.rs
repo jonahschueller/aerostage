@@ -9,8 +9,8 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceEvent, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
-    AerospaceWorkspace, AerospaceWorkspaceId,
+    AerospaceApp, AerospaceEvent, AerospaceEventStream, AerospaceLayout, AerospaceWindow,
+    AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
         common::{AerospaceCommand, format_aerospace},
@@ -203,7 +203,6 @@ impl AerospaceSocketBackend<OpenSocketState> {
     }
 }
 
-#[allow(dead_code)]
 impl AerospaceSocketBackend<OpenSocketState> {
     /// AeroSpace answers no other command on a subscribed connection, so the
     /// connection turns into the stream.
@@ -333,6 +332,14 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
         .context("Failed to execute flatten_workspace_tree.")?;
 
         Ok(())
+    }
+
+    /// Opens a second connection, because subscribing takes over a connection.
+    fn subscribe(&self) -> anyhow::Result<AerospaceEventStream> {
+        let events = AerospaceSocketBackend::with_aerospace_socket()?
+            .do_handshake()?
+            .into_event_stream()?;
+        Ok(Box::new(events.map(|event| event.map_err(Into::into))))
     }
 }
 

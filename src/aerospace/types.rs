@@ -15,7 +15,6 @@ where
 
 /// An event streamed by `aerospace subscribe`. Only the kind is kept, the
 /// payload is dropped.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(tag = "_event", rename_all = "kebab-case")]
 pub enum AerospaceEvent {
@@ -28,6 +27,9 @@ pub enum AerospaceEvent {
     #[serde(other)]
     Unknown,
 }
+
+/// Ends when AeroSpace stops sending events.
+pub type AerospaceEventStream = Box<dyn Iterator<Item = anyhow::Result<AerospaceEvent>> + Send>;
 
 #[derive(Debug, Deserialize)]
 pub struct AerospaceApp {

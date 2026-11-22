@@ -7,8 +7,8 @@ use anyhow::{Context, Result, anyhow, ensure};
 use serde::de::DeserializeOwned;
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceEvent, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
-    AerospaceWorkspace, AerospaceWorkspaceId,
+    AerospaceApp, AerospaceEvent, AerospaceEventStream, AerospaceLayout, AerospaceWindow,
+    AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
         common::{AerospaceCommand, format_aerospace},
@@ -83,7 +83,6 @@ pub struct AerospaceCliEventStream {
 }
 
 impl AerospaceCliEventStream {
-    #[allow(dead_code)]
     pub fn subscribe() -> Result<Self> {
         let mut command = Command::new("aerospace");
         command.args([AerospaceCommand::Subscribe.to_string().as_str(), "--all"]);
@@ -209,6 +208,10 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliBackend<E> {
         .with_context(|| "Failed to execute flatten_workspace_tree.")?;
 
         Ok(())
+    }
+
+    fn subscribe(&self) -> Result<AerospaceEventStream> {
+        Ok(Box::new(AerospaceCliEventStream::subscribe()?))
     }
 }
 

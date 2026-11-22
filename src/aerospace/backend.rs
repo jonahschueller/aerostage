@@ -8,8 +8,8 @@ mod socket;
 use anyhow::Result;
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
-    AerospaceWorkspaceId,
+    AerospaceApp, AerospaceEventStream, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
+    AerospaceWorkspace, AerospaceWorkspaceId,
 };
 
 pub use cli::*;
@@ -28,4 +28,5 @@ pub trait AerospaceBackend {
     ) -> Result<()>;
     fn layout(&self, workspace: &AerospaceWorkspaceId, layout: &AerospaceLayout) -> Result<()>;
     fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()>;
+    fn subscribe(&self) -> Result<AerospaceEventStream>;
 }
