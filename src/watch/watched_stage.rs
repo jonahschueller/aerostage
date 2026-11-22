@@ -147,8 +147,9 @@ impl WatchedStage {
         Ok(())
     }
 
-    /// Binds windows that are not bound yet to unbound entries with a matching
-    /// title. Returns the moves that put those windows on their entry's workspace.
+    /// Binds windows that are not bound yet to unbound entries, by title first
+    /// and then by app. Titles change too often to be the only way in.
+    /// Returns the moves that put those windows on their entry's workspace.
     pub fn bind_new_windows(
         &mut self,
         live_windows: &[AerospaceWindow],
@@ -172,7 +173,10 @@ impl WatchedStage {
         let (stage, entry_ids) = self.build_stage(|entry| entry.binding.is_none());
         let resolved = stage.resolve_with_locations(focused)?;
         let resolution = WindowResolution::resolve_with(
-            WindowResolver::empty().with_title_rules(),
+            WindowResolver::empty()
+                .with_title_rules()
+                .with_leftover_rules()
+                .with_count_by_app(),
             &resolved.stage,
             &free_windows,
         );
@@ -773,20 +777,89 @@ title = "Docs"
     }
 
     #[test]
-    fn bind_new_windows_ignores_entries_without_a_title() {
+    fn bind_new_windows_binds_by_app_when_no_title_matches() {
         let mut watched = restored(vec![]);
 
         let moves = watched
             .bind_new_windows(&[live(11, "Ghostty", "zsh", "4"), slack("4")], Some("5"))
             .unwrap();
 
-        assert!(moves.is_empty());
-        assert!(
-            watched
-                .entries()
-                .iter()
-                .all(|entry| entry.binding.is_none())
+        assert_eq!(moves.len(), 2);
+        assert!(moves.contains(&WindowMove {
+            window_id: 11,
+            workspace: "1".into(),
+        }));
+        assert!(moves.contains(&WindowMove {
+            window_id: 12,
+            workspace: "5".into(),
+        }));
+        assert_eq!(binding(&watched, 1).unwrap().window_id, 11);
+        assert_eq!(binding(&watched, 2).unwrap().window_id, 12);
+    }
+
+    const TWO_SAFARIS: &str = r#"
+[[workspace]]
+name = "1"
+
+[[workspace.window]]
+app = "Safari"
+title = "Docs"
+
+[[workspace]]
+name = "2"
+
+[[workspace.window]]
+app = "Safari"
+title = "Mail"
+"#;
+
+    #[test]
+    fn bind_new_windows_prefers_titles_over_app_matches() {
+        let mut watched = load(TWO_SAFARIS);
+
+        let moves = watched
+            .bind_new_windows(
+                &[
+                    live(10, "Safari", "Calendar", "4"),
+                    live(11, "Safari", "Mail", "4"),
+                ],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(moves.len(), 2);
+        assert_eq!(binding(&watched, 0).unwrap().window_id, 10);
+        assert_eq!(binding(&watched, 1).unwrap().window_id, 11);
+    }
+
+    #[test]
+    fn bind_new_windows_guesses_among_entries_of_the_same_app() {
+        let mut watched = load(TWO_SAFARIS);
+
+        let moves = watched
+            .bind_new_windows(&[live(10, "Safari", "Calendar", "4")], None)
+            .unwrap();
+
+        assert_eq!(
+            moves,
+            vec![WindowMove {
+                window_id: 10,
+                workspace: "1".into(),
+            }]
         );
+        assert_eq!(binding(&watched, 1), None);
+    }
+
+    #[test]
+    fn bind_new_windows_prefers_windows_already_on_the_entry_workspace() {
+        let mut watched = load(TWO_SAFARIS);
+
+        let moves = watched
+            .bind_new_windows(&[live(10, "Safari", "Calendar", "2")], None)
+            .unwrap();
+
+        assert!(moves.is_empty());
+        assert_eq!(binding(&watched, 1).unwrap().window_id, 10);
     }
 
     #[test]
