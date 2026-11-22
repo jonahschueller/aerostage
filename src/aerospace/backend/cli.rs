@@ -1,11 +1,14 @@
-use std::process::Command;
+use std::{
+    io::{BufRead, BufReader, Lines},
+    process::{Child, ChildStdout, Command, Stdio},
+};
 
 use anyhow::{Context, Result, anyhow, ensure};
 use serde::de::DeserializeOwned;
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
-    AerospaceWorkspaceId,
+    AerospaceApp, AerospaceEvent, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
+    AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
         common::{AerospaceCommand, format_aerospace},
@@ -69,6 +72,57 @@ impl<E: CommandExecutor> AerospaceCliBackend<E> {
 
         serde_json::from_str(&output)
             .map_err(|error| anyhow!("Failed to deserialize {} response: {}", command, error))
+    }
+}
+
+/// Reads one event per line from a running `aerospace subscribe`. The process
+/// is killed when the stream is dropped.
+pub struct AerospaceCliEventStream {
+    child: Child,
+    lines: Lines<BufReader<ChildStdout>>,
+}
+
+impl AerospaceCliEventStream {
+    #[allow(dead_code)]
+    pub fn subscribe() -> Result<Self> {
+        let mut command = Command::new("aerospace");
+        command.args([AerospaceCommand::Subscribe.to_string().as_str(), "--all"]);
+        Self::spawn(command)
+    }
+
+    fn spawn(mut command: Command) -> Result<Self> {
+        let mut child = command
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|err| anyhow!("Failed to execute aerospace CLI: {}", err))?;
+        let stdout = child
+            .stdout
+            .take()
+            .context("aerospace subscribe has no stdout")?;
+
+        Ok(Self {
+            child,
+            lines: BufReader::new(stdout).lines(),
+        })
+    }
+}
+
+impl Iterator for AerospaceCliEventStream {
+    type Item = Result<AerospaceEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let line = self.lines.next()?;
+        Some(line.map_err(Into::into).and_then(|line| {
+            serde_json::from_str(&line)
+                .with_context(|| format!("Failed to parse AeroSpace event: {line}"))
+        }))
+    }
+}
+
+impl Drop for AerospaceCliEventStream {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -289,5 +343,37 @@ mod tests {
         assert_eq!(window.window_id, 1);
         assert_eq!(window.window_title, "");
         assert_eq!(window.app_bundle_id, "");
+    }
+
+    #[test]
+    fn event_stream_reads_one_event_per_line() {
+        let mut command = Command::new("printf");
+        command.arg(concat!(
+            r#"{"_event":"mode-changed","mode":"main"}"#,
+            "\n",
+            r#"{"_event":"window-detected","windowId":7}"#,
+            "\n",
+        ));
+
+        let events: Vec<_> = AerospaceCliEventStream::spawn(command)
+            .unwrap()
+            .collect::<Result<_>>()
+            .unwrap();
+
+        assert_eq!(
+            events,
+            [AerospaceEvent::ModeChanged, AerospaceEvent::WindowDetected]
+        );
+    }
+
+    #[test]
+    fn event_stream_reports_lines_that_are_not_events() {
+        let mut command = Command::new("printf");
+        command.arg("not-json\n");
+
+        let mut events = AerospaceCliEventStream::spawn(command).unwrap();
+
+        assert!(events.next().unwrap().is_err());
+        assert!(events.next().is_none());
     }
 }
