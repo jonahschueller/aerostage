@@ -8,6 +8,7 @@ pub enum AerospaceCommand {
     MoveNodeToWorkspace,
     ChangeLayout,
     FlattenWorkspaceTree,
+    Subscribe,
 }
 
 impl Display for AerospaceCommand {
@@ -20,6 +21,7 @@ impl Display for AerospaceCommand {
             AerospaceCommand::MoveNodeToWorkspace => "move-node-to-workspace",
             AerospaceCommand::ChangeLayout => "layout",
             AerospaceCommand::FlattenWorkspaceTree => "flatten-workspace-tree",
+            AerospaceCommand::Subscribe => "subscribe",
         };
         write!(f, "{s}")
     }
