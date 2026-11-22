@@ -1,14 +1,10 @@
-use std::{
-    fs::File,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 
 use crate::{
     aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler,
-    common::parse_workspace_list, stage::repository::normalize_stage_filepath,
+    common::parse_workspace_list, stage::repository::StageRepository,
 };
 
 pub struct CaptureCommandHandler {
@@ -87,19 +83,12 @@ impl CommandHandler for CaptureCommandHandler {
             )
             .context("Failed to capture stage")?;
 
-        let writer: Box<dyn Write> = match &target.path {
-            Some(file_path) => {
-                let normalized_path = normalize_stage_filepath(file_path)?;
-                if let Some(parent) = normalized_path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-
-                Box::new(File::create(normalized_path)?)
-            }
-            None => Box::new(std::io::stdout().lock()),
-        };
-
-        stage.write(writer).context("Failed to capture stage.")?;
+        match &target.path {
+            Some(file_path) => StageRepository::save_to_file(&stage, file_path)?,
+            None => stage
+                .write(Box::new(std::io::stdout().lock()))
+                .context("Failed to capture stage.")?,
+        }
 
         Ok(())
     }

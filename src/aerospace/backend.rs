@@ -21,7 +21,14 @@ pub trait AerospaceBackend {
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>>;
     fn list_workspaces(&self) -> Result<Vec<AerospaceWorkspace>>;
     fn list_workspace_focused(&self) -> Result<AerospaceWorkspace>;
+    /// Fails when no window has focus.
+    fn list_window_focused(&self) -> Result<AerospaceWindow>;
     fn move_node_to_workspace(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        window_id: AerospaceWindowId,
+    ) -> Result<()>;
+    fn move_node_to_workspace_and_focus(
         &self,
         workspace: &AerospaceWorkspaceId,
         window_id: AerospaceWindowId,

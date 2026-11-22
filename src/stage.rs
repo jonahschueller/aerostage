@@ -188,13 +188,17 @@ impl UnresolvedStage {
         })
     }
 
-    pub fn write(&self, writer: Box<dyn Write>) -> Result<()> {
+    pub fn to_toml(&self) -> Result<String> {
         let toml_stage = toml::to_string_pretty(&self)
             .with_context(|| "Failed to convert stage to toml format.")?;
 
+        Ok(format!("{toml_stage}\n"))
+    }
+
+    pub fn write(&self, writer: Box<dyn Write>) -> Result<()> {
         let mut buffered = BufWriter::new(writer);
 
-        writeln!(buffered, "{}", toml_stage)
+        write!(buffered, "{}", self.to_toml()?)
             .with_context(|| "Failed to write context to output.")?;
 
         Ok(())

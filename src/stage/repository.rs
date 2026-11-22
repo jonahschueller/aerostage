@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    io,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -12,6 +11,12 @@ use crate::{config::Config, stage::UnresolvedStage};
 pub enum StageRepositoryError {
     #[error("failed to create stage file '{}'", path.display())]
     CreateFile {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("failed to replace stage file '{}'", path.display())]
+    ReplaceFile {
         path: PathBuf,
         #[source]
         source: io::Error,
@@ -73,20 +78,31 @@ pub struct StageFile {
 pub struct StageRepository {}
 
 impl StageRepository {
-    #[allow(dead_code)]
-    pub fn save_to_file<P: AsRef<Path>>(stage: UnresolvedStage, path: P) -> Result<()> {
+    /// Writes a temp file next to the stage file and renames it, so a stage
+    /// file is never left half-written.
+    pub fn save_to_file<P: AsRef<Path>>(stage: &UnresolvedStage, path: P) -> Result<()> {
         let path = normalize_stage_filepath(path.as_ref())?;
-        let file = File::create(&path).map_err(|source| StageRepositoryError::CreateFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-
-        stage
-            .write(Box::new(file))
+        let content = stage
+            .to_toml()
             .map_err(|source| StageRepositoryError::Save {
-                path: path.to_path_buf(),
+                path: path.clone(),
                 source,
-            })
+            })?;
+
+        let temp_path = path.with_extension("toml.tmp");
+        let create_error = |source| StageRepositoryError::CreateFile {
+            path: temp_path.clone(),
+            source,
+        };
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(create_error)?;
+        }
+        fs::write(&temp_path, content).map_err(create_error)?;
+
+        fs::rename(&temp_path, &path).map_err(|source| StageRepositoryError::ReplaceFile {
+            path: path.clone(),
+            source,
+        })
     }
 
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<StageFile> {
@@ -362,6 +378,22 @@ name = "1"
         let stage_file = StageRepository::load_from_relative_path(&config, "work").unwrap();
         assert_eq!(stage_file.stage.name.as_deref(), Some("work"));
         assert_eq!(stage_file.path, dir.join("work.toml"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_to_file_replaces_the_stage_file() {
+        let dir = temp_dir("save-replaces");
+        let path = dir.join("work.toml");
+        fs::write(&path, "name = \"old\"\n").unwrap();
+        let stage: UnresolvedStage = toml::from_str("name = \"new\"").unwrap();
+
+        StageRepository::save_to_file(&stage, dir.join("work")).unwrap();
+
+        let saved = StageRepository::load_from_file(&path).unwrap();
+        assert_eq!(saved.stage.name.as_deref(), Some("new"));
+        assert!(!dir.join("work.toml.tmp").exists());
 
         let _ = fs::remove_dir_all(dir);
     }

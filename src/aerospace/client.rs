@@ -60,12 +60,26 @@ impl Aerospace {
         self.backend.list_windows()
     }
 
+    /// Fails when no window has focus.
+    pub fn list_window_focused(&self) -> Result<AerospaceWindow> {
+        self.backend.list_window_focused()
+    }
+
     pub fn move_node_to_workspace(
         &self,
         workspace: &AerospaceWorkspaceId,
         window_id: AerospaceWindowId,
     ) -> Result<()> {
         self.backend.move_node_to_workspace(workspace, window_id)
+    }
+
+    pub fn move_node_to_workspace_and_focus(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        window_id: AerospaceWindowId,
+    ) -> Result<()> {
+        self.backend
+            .move_node_to_workspace_and_focus(workspace, window_id)
     }
 
     pub fn change_layout(
@@ -80,7 +94,6 @@ impl Aerospace {
         self.backend.flatten_workspace_tree(workspace)
     }
 
-    #[allow(dead_code)]
     pub fn subscribe(&self) -> Result<AerospaceEventStream> {
         self.backend.subscribe()
     }

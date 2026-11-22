@@ -11,7 +11,7 @@ use crate::aerospace::{
     AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
-        common::{AerospaceCommand, format_aerospace},
+        common::{AerospaceCommand, format_aerospace, window_format},
     },
 };
 
@@ -157,19 +157,26 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliBackend<E> {
     }
 
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
-        let fields = format_aerospace(&[
-            "window-id",
-            "window-title",
-            "app-name",
-            "app-bundle-id",
-            "workspace",
-        ]);
+        let fields = window_format();
 
         self.query_aerospace::<Vec<AerospaceWindow>>(
             &AerospaceCommand::ListWindows,
             &["--all", "--format", &fields],
         )
         .with_context(|| "Failed to execute list-windows.")
+    }
+
+    fn list_window_focused(&self) -> Result<AerospaceWindow> {
+        let fields = window_format();
+
+        self.query_aerospace::<Vec<AerospaceWindow>>(
+            &AerospaceCommand::ListWindows,
+            &["--focused", "--format", &fields],
+        )
+        .context("Failed to execute list_window_focused.")?
+        .into_iter()
+        .next()
+        .context("Aerospace returned no focused window")
     }
 
     fn move_node_to_workspace(
@@ -184,6 +191,28 @@ impl<E: CommandExecutor> AerospaceBackend for AerospaceCliBackend<E> {
             &["--window-id", &win_id_arg, "--", workspace],
         )
         .with_context(|| "Failed to execute move_node_to_workspace.")?;
+
+        Ok(())
+    }
+
+    fn move_node_to_workspace_and_focus(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        window_id: AerospaceWindowId,
+    ) -> Result<()> {
+        let win_id_arg = format!("{}", window_id);
+
+        self.execute_aerospace(
+            &AerospaceCommand::MoveNodeToWorkspace,
+            &[
+                "--focus-follows-window",
+                "--window-id",
+                &win_id_arg,
+                "--",
+                workspace,
+            ],
+        )
+        .with_context(|| "Failed to execute move_node_to_workspace_and_focus.")?;
 
         Ok(())
     }
