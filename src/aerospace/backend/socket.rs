@@ -1,6 +1,6 @@
 use std::{
     env,
-    io::{Read, Write},
+    io::{self, Read, Write},
     marker::PhantomData,
     os::unix::net::UnixStream,
 };
@@ -9,8 +9,8 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
-    AerospaceWorkspaceId,
+    AerospaceApp, AerospaceEvent, AerospaceEventStream, AerospaceLayout, AerospaceWindow,
+    AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
         common::{AerospaceCommand, format_aerospace},
@@ -203,6 +203,51 @@ impl AerospaceSocketBackend<OpenSocketState> {
     }
 }
 
+impl AerospaceSocketBackend<OpenSocketState> {
+    /// AeroSpace answers no other command on a subscribed connection, so the
+    /// connection turns into the stream.
+    pub fn into_event_stream(self) -> Result<AerospaceSocketEventStream> {
+        self.write_command(&AerospaceCommand::Subscribe, &["--all"])?;
+        Ok(AerospaceSocketEventStream { connection: self })
+    }
+}
+
+/// Ends when AeroSpace closes the connection.
+pub struct AerospaceSocketEventStream {
+    connection: AerospaceSocketBackend<OpenSocketState>,
+}
+
+impl Iterator for AerospaceSocketEventStream {
+    type Item = Result<AerospaceEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.connection.read_str() {
+            Ok(frame) => Some(parse_event_frame(&frame)),
+            Err(AerospaceBackendError::Io(error))
+                if error.kind() == io::ErrorKind::UnexpectedEof =>
+            {
+                None
+            }
+            Err(error) => Some(Err(error)),
+        }
+    }
+}
+
+/// A frame is either an event or, when subscribing failed, a command response.
+fn parse_event_frame(frame: &str) -> Result<AerospaceEvent> {
+    if let Ok(event) = serde_json::from_str(frame) {
+        return Ok(event);
+    }
+
+    let response: AerospaceServerResponse =
+        serde_json::from_str(frame).map_err(AerospaceBackendError::Deserialize)?;
+    Err(AerospaceBackendError::CommandFailed {
+        command: AerospaceCommand::Subscribe.to_string(),
+        exit_code: response.exit_code,
+        stderr: response.stderr,
+    })
+}
+
 impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
     fn list_apps(&self) -> anyhow::Result<Vec<AerospaceApp>> {
         let fields = format_aerospace(&["app-bundle-id", "app-name", "app-pid"]);
@@ -287,6 +332,14 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
         .context("Failed to execute flatten_workspace_tree.")?;
 
         Ok(())
+    }
+
+    /// Opens a second connection, because subscribing takes over a connection.
+    fn subscribe(&self) -> anyhow::Result<AerospaceEventStream> {
+        let events = AerospaceSocketBackend::with_aerospace_socket()?
+            .do_handshake()?
+            .into_event_stream()?;
+        Ok(Box::new(events.map(|event| event.map_err(Into::into))))
     }
 }
 
@@ -710,5 +763,52 @@ mod tests {
             ["flatten-workspace-tree", "--workspace", "1"]
         );
         handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn subscribe_streams_events_until_the_connection_closes() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_payload(br#"{"_event":"mode-changed","mode":"main"}"#);
+            peer.write_payload(br#"{"_event":"focus-changed","windowId":7,"workspace":"1"}"#);
+        });
+
+        let events: Vec<_> = backend
+            .into_event_stream()
+            .expect("subscribe should succeed")
+            .collect::<Result<_>>()
+            .expect("events should parse");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(request_args(&request), ["subscribe", "--all"]);
+        assert_eq!(
+            events,
+            [AerospaceEvent::ModeChanged, AerospaceEvent::FocusChanged]
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn subscribe_reports_a_rejected_subscription_as_command_failed() {
+        let (backend, handle) = connect_handshaken(|peer| {
+            let _ = peer.read_request();
+            peer.write_failure(2, "ERROR: Can't parse 'no-such-event'.");
+        });
+
+        let mut events = backend
+            .into_event_stream()
+            .expect("subscribe should succeed");
+        let error = events
+            .next()
+            .expect("stream should yield the failure")
+            .expect_err("a response frame should fail");
+
+        assert!(matches!(
+            error,
+            AerospaceBackendError::CommandFailed { exit_code: 2, .. }
+        ));
+        handle.join().expect("peer thread should finish");
+        assert!(events.next().is_none());
     }
 }

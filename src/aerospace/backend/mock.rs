@@ -1,8 +1,8 @@
 use anyhow::{Ok, Result};
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
-    AerospaceWorkspaceId, backend::AerospaceBackend,
+    AerospaceApp, AerospaceEventStream, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
+    AerospaceWorkspace, AerospaceWorkspaceId, backend::AerospaceBackend,
 };
 
 pub struct MockAerospaceBackend {
@@ -48,5 +48,9 @@ impl AerospaceBackend for MockAerospaceBackend {
 
     fn flatten_workspace_tree(&self, _workspace: &AerospaceWorkspaceId) -> Result<()> {
         Ok(())
+    }
+
+    fn subscribe(&self) -> Result<AerospaceEventStream> {
+        Ok(Box::new(std::iter::empty()))
     }
 }

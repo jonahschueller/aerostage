@@ -1,8 +1,8 @@
 use anyhow::{Result, anyhow};
 
 use crate::aerospace::{
-    AerospaceApp, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace,
-    AerospaceWorkspaceId,
+    AerospaceApp, AerospaceEventStream, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
+    AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{AerospaceBackend, AerospaceCliBackend, AerospaceSocketBackend},
 };
 
@@ -78,5 +78,10 @@ impl Aerospace {
 
     pub fn flatten_workspace_tree(&self, workspace: &AerospaceWorkspaceId) -> Result<()> {
         self.backend.flatten_workspace_tree(workspace)
+    }
+
+    #[allow(dead_code)]
+    pub fn subscribe(&self) -> Result<AerospaceEventStream> {
+        self.backend.subscribe()
     }
 }

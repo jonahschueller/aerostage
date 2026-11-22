@@ -13,6 +13,24 @@ where
     Ok(Option::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// An event streamed by `aerospace subscribe`. Only the kind is kept, the
+/// payload is dropped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(tag = "_event", rename_all = "kebab-case")]
+pub enum AerospaceEvent {
+    FocusChanged,
+    FocusedMonitorChanged,
+    FocusedWorkspaceChanged,
+    ModeChanged,
+    WindowDetected,
+    BindingTriggered,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Ends when AeroSpace stops sending events.
+pub type AerospaceEventStream = Box<dyn Iterator<Item = anyhow::Result<AerospaceEvent>> + Send>;
+
 #[derive(Debug, Deserialize)]
 pub struct AerospaceApp {
     #[allow(dead_code)]
@@ -127,5 +145,63 @@ impl AerospaceWindow {
     pub fn with_window_title(mut self, window_title: &str) -> Self {
         self.window_title = window_title.to_string();
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(json: &str) -> AerospaceEvent {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn parses_events_by_their_name() {
+        assert_eq!(
+            parse(r#"{"_event":"focus-changed","windowId":20481,"workspace":"2"}"#),
+            AerospaceEvent::FocusChanged
+        );
+        assert_eq!(
+            parse(r#"{"_event":"focus-changed","workspace":"2"}"#),
+            AerospaceEvent::FocusChanged
+        );
+        assert_eq!(
+            parse(r#"{"_event":"focused-monitor-changed","monitorId":2,"workspace":"2"}"#),
+            AerospaceEvent::FocusedMonitorChanged
+        );
+        assert_eq!(
+            parse(r#"{"_event":"focused-workspace-changed","prevWorkspace":"1","workspace":"2"}"#),
+            AerospaceEvent::FocusedWorkspaceChanged
+        );
+        assert_eq!(
+            parse(r#"{"_event":"mode-changed","mode":"main"}"#),
+            AerospaceEvent::ModeChanged
+        );
+        assert_eq!(
+            parse(
+                r#"{"_event":"window-detected","windowId":7,"appBundleId":"com.apple.Safari","appName":"Safari"}"#
+            ),
+            AerospaceEvent::WindowDetected
+        );
+        assert_eq!(
+            parse(r#"{"_event":"binding-triggered","binding":"alt-1","mode":"main"}"#),
+            AerospaceEvent::BindingTriggered
+        );
+    }
+
+    #[test]
+    fn parses_unknown_events_as_unknown() {
+        assert_eq!(
+            parse(r#"{"_event":"window-closed","windowId":7}"#),
+            AerospaceEvent::Unknown
+        );
+    }
+
+    #[test]
+    fn rejects_payloads_without_an_event_name() {
+        let result = serde_json::from_str::<AerospaceEvent>(r#"{"exitCode":2,"stderr":"ERROR"}"#);
+
+        assert!(result.is_err());
     }
 }
