@@ -1,19 +1,35 @@
 //! A stage as a flat list of window entries. An entry keeps its id when it
 //! moves to another workspace, unlike its position in the stage file.
 
-use crate::stage::{
-    StageWindow, StageWindowLocation, StageWorkspace, StageWorkspaceLayout, UnresolvedStage,
-    UnresolvedStageWorkspace, WorkspaceRef,
+use anyhow::Result;
+
+use crate::{
+    aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
+    restore::{MatchOrigin, StageRestorer},
+    stage::{
+        StageWindow, StageWindowLocation, StageWorkspace, StageWorkspaceLayout, UnresolvedStage,
+        UnresolvedStageWorkspace, WorkspaceRef,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EntryId(usize);
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Binding {
+    pub window_id: AerospaceWindowId,
+    /// The workspace the entry's workspace reference resolved to when it was bound.
+    pub workspace: AerospaceWorkspaceId,
+    /// Whether the entry's title was an exact copy of the window title.
+    pub title_tracked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct StageEntry {
     pub id: EntryId,
     pub workspace: WorkspaceRef,
     pub window: StageWindow,
+    pub binding: Option<Binding>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +68,7 @@ impl From<UnresolvedStage> for WatchedStage {
                     id: EntryId(entries.len()),
                     workspace: workspace.name.clone(),
                     window,
+                    binding: None,
                 });
             }
             workspaces.push(WorkspaceTable {
@@ -73,6 +90,40 @@ impl From<UnresolvedStage> for WatchedStage {
 impl WatchedStage {
     pub fn entries(&self) -> &[StageEntry] {
         &self.entries
+    }
+
+    /// Restores the stage and binds every entry whose window was matched.
+    pub fn restore(&mut self, aerospace: &Aerospace, focused: Option<&str>) -> Result<()> {
+        let (stage, entry_ids) = self.to_stage_with_entry_ids();
+        let resolved = stage.resolve_with_locations(focused)?;
+        let report = StageRestorer::new(aerospace, &resolved.stage).restore_stage(None)?;
+
+        for matched in report.matches {
+            let MatchOrigin::StageWindow(index) = matched.origin else {
+                continue;
+            };
+            let Some(window) = report
+                .live_windows
+                .iter()
+                .find(|window| window.window_id == matched.window_id)
+            else {
+                continue;
+            };
+
+            let id = entry_ids.at(resolved.window_locations[index]);
+            self.bind(id, window, matched.target_workspace);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, id: EntryId, window: &AerospaceWindow, workspace: AerospaceWorkspaceId) {
+        let entry = &mut self.entries[id.0];
+        entry.binding = Some(Binding {
+            window_id: window.window_id,
+            workspace,
+            title_tracked: entry.window.title.as_deref() == Some(window.window_title.as_str()),
+        });
     }
 
     pub fn to_stage(&self) -> UnresolvedStage {
@@ -287,5 +338,80 @@ app = "Ghostty"
         assert_eq!(entry_ids.at(location(0, 0)), EntryId(1));
         assert_eq!(entry_ids.at(location(1, 0)), EntryId(2));
         assert_eq!(entry_ids.at(location(2, 0)), EntryId(0));
+    }
+
+    fn live(
+        window_id: AerospaceWindowId,
+        app: &str,
+        title: &str,
+        workspace: &str,
+    ) -> AerospaceWindow {
+        AerospaceWindow::dummy()
+            .with_window_id(window_id)
+            .with_app_name(app)
+            .with_bundle_id(&format!("com.example.{app}"))
+            .with_window_title(title)
+            .with_workspace(workspace)
+    }
+
+    fn binding(watched: &WatchedStage, id: usize) -> Option<&Binding> {
+        watched.entries[id].binding.as_ref()
+    }
+
+    #[test]
+    fn restore_binds_matched_entries_to_their_windows() {
+        let mut watched = load(STAGE);
+        let aerospace = Aerospace::mock_with_windows(vec![
+            live(10, "Safari", "Docs", "3"),
+            live(12, "Slack", "General", "1").with_bundle_id("com.tinyspeck.slackmacgap"),
+        ]);
+
+        watched.restore(&aerospace, Some("5")).unwrap();
+
+        assert_eq!(
+            binding(&watched, 0),
+            Some(&Binding {
+                window_id: 10,
+                workspace: "1".into(),
+                title_tracked: true,
+            })
+        );
+        assert_eq!(binding(&watched, 1), None);
+        assert_eq!(
+            binding(&watched, 2),
+            Some(&Binding {
+                window_id: 12,
+                workspace: "5".into(),
+                title_tracked: false,
+            })
+        );
+    }
+
+    #[test]
+    fn restore_tracks_only_exact_title_copies() {
+        let mut watched = load(STAGE);
+        let aerospace =
+            Aerospace::mock_with_windows(vec![live(10, "Safari", "Docs — Safari", "1")]);
+
+        watched.restore(&aerospace, Some("5")).unwrap();
+
+        let bound = binding(&watched, 0).unwrap();
+        assert_eq!(bound.window_id, 10);
+        assert!(!bound.title_tracked);
+    }
+
+    #[test]
+    fn restore_does_not_bind_windows_sent_to_the_default_workspace() {
+        let mut watched = load(STAGE);
+        let aerospace = Aerospace::mock_with_windows(vec![live(13, "Finder", "Downloads", "1")]);
+
+        watched.restore(&aerospace, Some("5")).unwrap();
+
+        assert!(
+            watched
+                .entries()
+                .iter()
+                .all(|entry| entry.binding.is_none())
+        );
     }
 }
