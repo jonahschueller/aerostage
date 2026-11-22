@@ -13,7 +13,7 @@ use crate::aerospace::{
     AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
     backend::{
         AerospaceBackend,
-        common::{AerospaceCommand, format_aerospace},
+        common::{AerospaceCommand, format_aerospace, window_format},
         error::{AerospaceBackendError, Result},
     },
 };
@@ -277,19 +277,26 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
     }
 
     fn list_windows(&self) -> anyhow::Result<Vec<AerospaceWindow>> {
-        let fields = format_aerospace(&[
-            "window-id",
-            "window-title",
-            "app-name",
-            "app-bundle-id",
-            "workspace",
-        ]);
+        let fields = window_format();
 
         self.query_command::<Vec<AerospaceWindow>>(
             &AerospaceCommand::ListWindows,
             &["--all", "--format", &fields],
         )
         .context("Failed to execute list-windows.")
+    }
+
+    fn list_window_focused(&self) -> anyhow::Result<AerospaceWindow> {
+        let fields = window_format();
+
+        self.query_command::<Vec<AerospaceWindow>>(
+            &AerospaceCommand::ListWindows,
+            &["--focused", "--format", &fields],
+        )
+        .context("Failed to execute list_window_focused.")?
+        .into_iter()
+        .next()
+        .context("Aerospace returned no focused window")
     }
 
     fn move_node_to_workspace(
@@ -304,6 +311,28 @@ impl AerospaceBackend for AerospaceSocketBackend<OpenSocketState> {
             &["--window-id", &win_id_arg, "--", workspace],
         )
         .context("Failed to execute move_node_to_workspace.")?;
+
+        Ok(())
+    }
+
+    fn move_node_to_workspace_and_focus(
+        &self,
+        workspace: &AerospaceWorkspaceId,
+        window_id: AerospaceWindowId,
+    ) -> anyhow::Result<()> {
+        let win_id_arg = format!("{}", window_id);
+
+        self.execute_command(
+            &AerospaceCommand::MoveNodeToWorkspace,
+            &[
+                "--focus-follows-window",
+                "--window-id",
+                &win_id_arg,
+                "--",
+                workspace,
+            ],
+        )
+        .context("Failed to execute move_node_to_workspace_and_focus.")?;
 
         Ok(())
     }
@@ -721,6 +750,54 @@ mod tests {
         assert_eq!(
             request_args(&request),
             ["move-node-to-workspace", "--window-id", "42", "--", "main"]
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn list_window_focused_queries_the_focused_window() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success(r#"[{"window-id": 7, "workspace": "main"}]"#);
+        });
+
+        let window = backend
+            .list_window_focused()
+            .expect("should parse the focused window");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(window.window_id, 7);
+        assert_eq!(
+            request_args(&request)[..3],
+            ["list-windows", "--json", "--focused"]
+        );
+        handle.join().expect("peer thread should finish");
+    }
+
+    #[test]
+    fn move_node_to_workspace_and_focus_lets_focus_follow() {
+        let (tx, rx) = mpsc::channel();
+        let (backend, handle) = connect_handshaken(move |peer| {
+            tx.send(peer.read_request()).unwrap();
+            peer.write_success("");
+        });
+
+        backend
+            .move_node_to_workspace_and_focus(&"main".to_string(), 42)
+            .expect("move should succeed");
+        let request = rx.recv().expect("peer should receive a request");
+
+        assert_eq!(
+            request_args(&request),
+            [
+                "move-node-to-workspace",
+                "--focus-follows-window",
+                "--window-id",
+                "42",
+                "--",
+                "main"
+            ]
         );
         handle.join().expect("peer thread should finish");
     }

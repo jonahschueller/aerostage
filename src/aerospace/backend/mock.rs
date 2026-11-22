@@ -1,4 +1,4 @@
-use anyhow::{Ok, Result};
+use anyhow::{Context, Ok, Result};
 
 use crate::aerospace::{
     AerospaceApp, AerospaceEventStream, AerospaceLayout, AerospaceWindow, AerospaceWindowId,
@@ -34,7 +34,22 @@ impl AerospaceBackend for MockAerospaceBackend {
         })
     }
 
+    fn list_window_focused(&self) -> Result<AerospaceWindow> {
+        self.windows
+            .first()
+            .cloned()
+            .context("No window is focused")
+    }
+
     fn move_node_to_workspace(
+        &self,
+        _workspace: &AerospaceWorkspaceId,
+        _window_id: AerospaceWindowId,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn move_node_to_workspace_and_focus(
         &self,
         _workspace: &AerospaceWorkspaceId,
         _window_id: AerospaceWindowId,

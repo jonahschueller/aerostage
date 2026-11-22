@@ -27,6 +27,16 @@ impl Display for AerospaceCommand {
     }
 }
 
+pub fn window_format() -> String {
+    format_aerospace(&[
+        "window-id",
+        "window-title",
+        "app-name",
+        "app-bundle-id",
+        "workspace",
+    ])
+}
+
 pub fn format_aerospace(included_fields: &[&str]) -> String {
     included_fields
         .iter()
