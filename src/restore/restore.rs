@@ -6,7 +6,7 @@ use crate::{
     aerospace::{
         Aerospace, AerospaceLayout, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId,
     },
-    restore::resolution::WindowResolution,
+    restore::{resolution::WindowResolution, types::ResolvedWindowMatch},
     stage::{Stage, StageWorkspace},
 };
 
@@ -130,6 +130,12 @@ impl RestorePlan {
     }
 }
 
+#[derive(Debug)]
+pub struct RestoreReport {
+    pub matches: Vec<ResolvedWindowMatch>,
+    pub live_windows: Vec<AerospaceWindow>,
+}
+
 pub struct StageRestorer<'a> {
     aerospace: &'a Aerospace,
     stage: &'a Stage,
@@ -140,7 +146,10 @@ impl<'a> StageRestorer<'a> {
         Self { aerospace, stage }
     }
 
-    pub fn restore_stage(&self, source_workspaces: Option<&[AerospaceWorkspaceId]>) -> Result<()> {
+    pub fn restore_stage(
+        &self,
+        source_workspaces: Option<&[AerospaceWorkspaceId]>,
+    ) -> Result<RestoreReport> {
         let live_windows: Vec<_> = self
             .aerospace
             .list_windows()?
@@ -165,7 +174,10 @@ impl<'a> StageRestorer<'a> {
             )
         }
 
-        Ok(())
+        Ok(RestoreReport {
+            matches: resolution.resolved_windows,
+            live_windows,
+        })
     }
 }
 
@@ -173,11 +185,8 @@ impl<'a> StageRestorer<'a> {
 mod tests {
     use super::*;
     use crate::{
-        restore::{
-            resolution::WindowResolution,
-            types::{MatchOrigin, ResolvedWindowMatch},
-        },
-        stage::StageWorkspaceLayout,
+        restore::{resolution::WindowResolution, types::MatchOrigin},
+        stage::{StageWindow, StageWorkspaceLayout},
     };
 
     #[test]
@@ -258,5 +267,51 @@ mod tests {
             }
             _ => panic!("Expected MoveToWorkspace action, but got ChangeLayout"),
         }
+    }
+
+    #[test]
+    fn restore_stage_reports_applied_matches_and_live_windows() {
+        let stage = Stage {
+            name: None,
+            description: None,
+            workspaces: vec![StageWorkspace {
+                name: "2".into(),
+                windows: vec![StageWindow {
+                    app: Some("Code".into()),
+                    title: Some("aerostage".into()),
+                    bundle_id: None,
+                }],
+                layout: None,
+            }],
+            default_workspace: None,
+        };
+        let live_windows = vec![
+            AerospaceWindow::dummy()
+                .with_window_id(7)
+                .with_app_name("Code")
+                .with_window_title("aerostage")
+                .with_workspace("1"),
+            AerospaceWindow::dummy()
+                .with_window_id(8)
+                .with_app_name("Finder")
+                .with_window_title("Downloads")
+                .with_workspace("1"),
+        ];
+        let aerospace = Aerospace::mock_with_windows(live_windows);
+
+        let report = StageRestorer::new(&aerospace, &stage)
+            .restore_stage(None)
+            .unwrap();
+
+        assert_eq!(
+            report.matches,
+            vec![ResolvedWindowMatch {
+                target_workspace: "2".into(),
+                window_id: 7,
+                origin: MatchOrigin::StageWindow(0),
+            }]
+        );
+        let seen: Vec<_> = report.live_windows.iter().map(|w| w.window_id).collect();
+        assert_eq!(seen, vec![7, 8]);
     }
 }
