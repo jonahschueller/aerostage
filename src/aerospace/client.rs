@@ -13,8 +13,15 @@ pub struct Aerospace {
 impl Aerospace {
     #[cfg(test)]
     pub fn mock() -> Self {
+        Self::mock_with_windows(Vec::new())
+    }
+
+    #[cfg(test)]
+    pub fn mock_with_windows(windows: Vec<AerospaceWindow>) -> Self {
         Self {
-            backend: Box::new(crate::aerospace::backend::mock::MockAerospaceBackend::new()),
+            backend: Box::new(
+                crate::aerospace::backend::mock::MockAerospaceBackend::with_windows(windows),
+            ),
         }
     }
 

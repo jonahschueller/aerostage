@@ -10,3 +10,5 @@ mod title;
 mod types;
 
 pub use command::RestoreCommandHandler;
+pub use restore::StageRestorer;
+pub use types::MatchOrigin;

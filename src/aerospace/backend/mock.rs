@@ -5,11 +5,13 @@ use crate::aerospace::{
     AerospaceWorkspaceId, backend::AerospaceBackend,
 };
 
-pub struct MockAerospaceBackend {}
+pub struct MockAerospaceBackend {
+    windows: Vec<AerospaceWindow>,
+}
 
 impl MockAerospaceBackend {
-    pub fn new() -> Self {
-        Self {}
+    pub fn with_windows(windows: Vec<AerospaceWindow>) -> Self {
+        Self { windows }
     }
 }
 
@@ -22,7 +24,7 @@ impl AerospaceBackend for MockAerospaceBackend {
     }
 
     fn list_windows(&self) -> Result<Vec<AerospaceWindow>> {
-        Ok(vec![])
+        Ok(self.windows.clone())
     }
 
     fn list_workspace_focused(&self) -> Result<AerospaceWorkspace> {
