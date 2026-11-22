@@ -1,7 +1,7 @@
 //! A stage as a flat list of window entries. An entry keeps its id when it
 //! moves to another workspace, unlike its position in the stage file.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use anyhow::Result;
 
@@ -32,6 +32,23 @@ pub struct StageEntry {
     pub workspace: WorkspaceRef,
     pub window: StageWindow,
     pub binding: Option<Binding>,
+}
+
+impl StageEntry {
+    /// A `@focused` entry stays `@focused` until its window leaves the
+    /// workspace it was bound on.
+    fn follow_workspace(&mut self, window: &AerospaceWindow) -> bool {
+        let Some(binding) = &mut self.binding else {
+            return false;
+        };
+        if binding.workspace == window.workspace {
+            return false;
+        }
+
+        binding.workspace = window.workspace.clone();
+        self.workspace = WorkspaceRef::Named(window.workspace.clone());
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -119,20 +136,27 @@ impl WatchedStage {
         Ok(())
     }
 
-    /// An entry whose window closed is unbound but stays in the stage.
-    pub fn reconcile(&mut self, live_windows: &[AerospaceWindow]) {
-        let open_windows: HashSet<AerospaceWindowId> =
-            live_windows.iter().map(|window| window.window_id).collect();
+    /// Returns whether the stage changed. An entry whose window closed is
+    /// unbound but stays in the stage.
+    pub fn reconcile(&mut self, live_windows: &[AerospaceWindow]) -> bool {
+        let live_by_id: HashMap<AerospaceWindowId, &AerospaceWindow> = live_windows
+            .iter()
+            .map(|window| (window.window_id, window))
+            .collect();
+        let mut changed = false;
 
         for entry in &mut self.entries {
-            if entry
-                .binding
-                .as_ref()
-                .is_some_and(|binding| !open_windows.contains(&binding.window_id))
-            {
-                entry.binding = None;
+            let Some(window_id) = entry.binding.as_ref().map(|binding| binding.window_id) else {
+                continue;
+            };
+
+            match live_by_id.get(&window_id) {
+                None => entry.binding = None,
+                Some(window) => changed |= entry.follow_workspace(window),
             }
         }
+
+        changed
     }
 
     fn bind(&mut self, id: EntryId, window: &AerospaceWindow, workspace: AerospaceWorkspaceId) {
@@ -442,11 +466,62 @@ app = "Ghostty"
         watched.restore(&aerospace, Some("5")).unwrap();
         let stage_before = toml::to_string(&watched.to_stage()).unwrap();
 
-        watched.reconcile(&[safari]);
+        assert!(!watched.reconcile(&[safari]));
 
         assert_eq!(binding(&watched, 0).map(|b| b.window_id), Some(10));
         assert_eq!(binding(&watched, 2), None);
         assert_eq!(watched.entries().len(), 3);
         assert_eq!(toml::to_string(&watched.to_stage()).unwrap(), stage_before);
+    }
+
+    fn restored(windows: Vec<AerospaceWindow>) -> WatchedStage {
+        let mut watched = load(STAGE);
+        watched
+            .restore(&Aerospace::mock_with_windows(windows), Some("5"))
+            .unwrap();
+        watched
+    }
+
+    fn slack(workspace: &str) -> AerospaceWindow {
+        live(12, "Slack", "General", workspace).with_bundle_id("com.tinyspeck.slackmacgap")
+    }
+
+    #[test]
+    fn reconcile_moves_entries_with_their_window() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        assert!(watched.reconcile(&[live(10, "Safari", "Docs", "3")]));
+
+        assert_eq!(
+            watched.entries[0].workspace,
+            WorkspaceRef::Named("3".into())
+        );
+        assert_eq!(binding(&watched, 0).unwrap().workspace, "3");
+        let rebuilt = watched.to_stage();
+        assert_eq!(
+            rebuilt.workspaces[2].windows[0].title.as_deref(),
+            Some("Docs")
+        );
+    }
+
+    #[test]
+    fn reconcile_reports_no_change_when_nothing_moved() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        assert!(!watched.reconcile(&[live(10, "Safari", "Docs", "1")]));
+    }
+
+    #[test]
+    fn reconcile_keeps_focused_while_the_window_stays_on_its_workspace() {
+        let mut watched = restored(vec![slack("1")]);
+
+        assert!(!watched.reconcile(&[slack("5")]));
+        assert_eq!(watched.entries[2].workspace, WorkspaceRef::Focused);
+
+        assert!(watched.reconcile(&[slack("2")]));
+        assert_eq!(
+            watched.entries[2].workspace,
+            WorkspaceRef::Named("2".into())
+        );
     }
 }
