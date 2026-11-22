@@ -2,8 +2,8 @@
 //! moves to another workspace, unlike its position in the stage file.
 
 use crate::stage::{
-    StageWindow, StageWorkspace, StageWorkspaceLayout, UnresolvedStage, UnresolvedStageWorkspace,
-    WorkspaceRef,
+    StageWindow, StageWindowLocation, StageWorkspace, StageWorkspaceLayout, UnresolvedStage,
+    UnresolvedStageWorkspace, WorkspaceRef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -20,6 +20,16 @@ pub struct StageEntry {
 struct WorkspaceTable {
     name: WorkspaceRef,
     layout: Option<StageWorkspaceLayout>,
+}
+
+/// Entry ids grouped like the workspaces and windows of a built stage.
+#[derive(Debug)]
+pub struct EntryIds(Vec<Vec<EntryId>>);
+
+impl EntryIds {
+    pub fn at(&self, location: StageWindowLocation) -> EntryId {
+        self.0[location.workspace_index][location.window_index]
+    }
 }
 
 #[derive(Debug)]
@@ -65,8 +75,12 @@ impl WatchedStage {
         &self.entries
     }
 
-    /// Entries whose workspace has no table get a new table at the end.
     pub fn to_stage(&self) -> UnresolvedStage {
+        self.to_stage_with_entry_ids().0
+    }
+
+    /// Entries whose workspace has no table get a new table at the end.
+    pub fn to_stage_with_entry_ids(&self) -> (UnresolvedStage, EntryIds) {
         let mut workspaces: Vec<UnresolvedStageWorkspace> = self
             .workspaces
             .iter()
@@ -76,6 +90,7 @@ impl WatchedStage {
                 layout: table.layout.clone(),
             })
             .collect();
+        let mut entry_ids: Vec<Vec<EntryId>> = vec![Vec::new(); workspaces.len()];
 
         for entry in &self.entries {
             let index = match workspaces.iter().position(|ws| ws.name == entry.workspace) {
@@ -86,18 +101,22 @@ impl WatchedStage {
                         windows: Vec::new(),
                         layout: None,
                     });
+                    entry_ids.push(Vec::new());
                     workspaces.len() - 1
                 }
             };
             workspaces[index].windows.push(entry.window.clone());
+            entry_ids[index].push(entry.id);
         }
 
-        UnresolvedStage {
+        let stage = UnresolvedStage {
             name: self.name.clone(),
             description: self.description.clone(),
             workspaces,
             default_workspace: self.default_workspace.clone(),
-        }
+        };
+
+        (stage, EntryIds(entry_ids))
     }
 }
 
@@ -252,5 +271,21 @@ app = "Ghostty"
             rebuilt.workspaces[1].layout,
             Some(StageWorkspaceLayout::HTiles)
         );
+    }
+
+    #[test]
+    fn entry_ids_follow_entries_to_their_new_table() {
+        let mut watched = load(STAGE);
+        watched.entries[0].workspace = WorkspaceRef::Named("3".into());
+
+        let (_, entry_ids) = watched.to_stage_with_entry_ids();
+
+        let location = |workspace_index, window_index| StageWindowLocation {
+            workspace_index,
+            window_index,
+        };
+        assert_eq!(entry_ids.at(location(0, 0)), EntryId(1));
+        assert_eq!(entry_ids.at(location(1, 0)), EntryId(2));
+        assert_eq!(entry_ids.at(location(2, 0)), EntryId(0));
     }
 }
