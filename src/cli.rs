@@ -8,6 +8,7 @@ use crate::{
     config::Config,
     restore::RestoreCommandHandler,
     stage::commands::{StageListCommandHandler, StageShowCommandHandler},
+    watch::WatchCommandHandler,
 };
 
 pub trait CommandHandler {
@@ -51,6 +52,11 @@ pub struct RestoreArgs {
 }
 
 #[derive(Args, Debug)]
+pub struct WatchArgs {
+    pub stage: Option<String>,
+}
+
+#[derive(Args, Debug)]
 pub struct ListArgs {
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub json: bool,
@@ -67,6 +73,12 @@ impl From<RestoreArgs> for RestoreCommandHandler {
             stage: args.stage,
             from_workspaces: args.from_workspaces,
         }
+    }
+}
+
+impl From<WatchArgs> for WatchCommandHandler {
+    fn from(args: WatchArgs) -> Self {
+        WatchCommandHandler { stage: args.stage }
     }
 }
 
@@ -102,6 +114,7 @@ impl From<ShowArgs> for StageShowCommandHandler {
 pub enum Commands {
     Capture(CaptureArgs),
     Restore(RestoreArgs),
+    Watch(WatchArgs),
     List(ListArgs),
     Show(ShowArgs),
 }
@@ -111,6 +124,7 @@ impl Commands {
         match self {
             Self::Capture(capture_args) => Box::new(CaptureCommandHandler::from(capture_args)),
             Self::Restore(restore_args) => Box::new(RestoreCommandHandler::from(restore_args)),
+            Self::Watch(watch_args) => Box::new(WatchCommandHandler::from(watch_args)),
             Self::List(list_args) => Box::new(StageListCommandHandler::from(list_args)),
             Self::Show(show_args) => Box::new(StageShowCommandHandler::from(show_args)),
         }
@@ -173,6 +187,21 @@ mod tests {
         match show.command {
             Commands::Show(args) => assert!(args.stage.is_none()),
             _ => panic!("expected show command"),
+        }
+    }
+
+    #[test]
+    fn watch_stage_argument_is_optional() {
+        let cli = Cli::try_parse_from(["aerostage", "watch"]).unwrap();
+        match cli.command {
+            Commands::Watch(args) => assert!(args.stage.is_none()),
+            _ => panic!("expected watch command"),
+        }
+
+        let cli = Cli::try_parse_from(["aerostage", "watch", "work"]).unwrap();
+        match cli.command {
+            Commands::Watch(args) => assert_eq!(args.stage.as_deref(), Some("work")),
+            _ => panic!("expected watch command"),
         }
     }
 
