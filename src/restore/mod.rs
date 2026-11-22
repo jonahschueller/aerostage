@@ -10,5 +10,6 @@ mod title;
 mod types;
 
 pub use command::RestoreCommandHandler;
+pub use resolution::{WindowResolution, WindowResolver};
 pub use restore::StageRestorer;
-pub use types::MatchOrigin;
+pub use types::{MatchOrigin, ResolvedWindowMatch};
