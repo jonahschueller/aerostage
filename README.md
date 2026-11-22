@@ -32,12 +32,14 @@ AeroStage saves named **stages**: snapshots of which windows belong on which Aer
 ```sh
 aerostage capture work
 aerostage restore work
+aerostage watch work
 aerostage list
 aerostage show work
 ```
 
 - `capture [stage]` saves the current workspace arrangement. Omit the stage name to use the default stage. Use `--stdout` to print the stage instead of saving it.
 - `restore [stage]` restores a saved arrangement. Windows AeroStage cannot match are left where they are.
+- `watch [stage]` restores a stage, then keeps it in sync with AeroSpace while it runs.
 - `list` shows the saved stages. Add `--json` for JSON output.
 - `show [stage]` prints a stage without restoring it.
 
@@ -96,6 +98,36 @@ aerostage restore work --from-workspaces 1,2
 ```
 
 Workspace names in a stage and in `--from-workspaces` can be `@focused`; see [Focused workspace](#focused-workspace).
+
+## Watch
+
+```sh
+aerostage watch work
+```
+
+Restores `work.toml` once, then keeps running and updates the stage file when its windows change. Omit the stage name to watch the default stage. Start it with AeroSpace:
+
+```toml
+after-startup-command = ['exec-and-forget aerostage watch']
+```
+
+Watch only manages the windows the stage describes. Each entry in the stage is either bound to a live window or waiting for one:
+
+- When a bound window moves to another workspace, the stage follows it.
+- When a bound window closes, its entry stays in the stage and waits. Quitting apps or shutting down the Mac therefore leaves the stage as it was.
+- When a new window opens, it can claim a waiting entry: by title first, then by app. Watch moves it to the entry's workspace. If the window had focus, focus follows it.
+
+Watch keeps your edits:
+
+- A title is only updated if it was an exact copy of the window title when the window was bound. Titles you edited stay as written.
+- An entry under `@focused` stays `@focused` until its window leaves the workspace `@focused` stood for.
+- A workspace's `layout` is updated only if the stage already sets one and a bound window is on that workspace.
+
+Limits:
+
+- Watch never adds windows to the stage. Capture the stage again to add new ones.
+- Watch reads the stage file only when it starts. Edits made while it runs are overwritten by its next save, and saving drops comments from the file.
+- There is no stop command. Quit it with `pkill -f "aerostage watch"`.
 
 ## Stage files
 
