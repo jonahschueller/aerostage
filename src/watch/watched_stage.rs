@@ -128,6 +128,7 @@ impl From<UnresolvedStage> for WatchedStage {
 }
 
 impl WatchedStage {
+    #[cfg(test)]
     pub fn entries(&self) -> &[StageEntry] {
         &self.entries
     }

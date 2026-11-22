@@ -6,7 +6,6 @@ mod config;
 mod restore;
 mod stage;
 mod types;
-#[allow(dead_code)]
 mod watch;
 
 use std::process::exit;
