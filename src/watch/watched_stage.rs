@@ -1,12 +1,14 @@
 //! A stage as a flat list of window entries. An entry keeps its id when it
 //! moves to another workspace, unlike its position in the stage file.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 
 use crate::{
-    aerospace::{Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspaceId},
+    aerospace::{
+        Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
+    },
     restore::{MatchOrigin, StageRestorer},
     stage::{
         StageWindow, StageWindowLocation, StageWorkspace, StageWorkspaceLayout, UnresolvedStage,
@@ -151,7 +153,11 @@ impl WatchedStage {
 
     /// Returns whether the stage changed. An entry whose window closed is
     /// unbound but stays in the stage.
-    pub fn reconcile(&mut self, live_windows: &[AerospaceWindow]) -> bool {
+    pub fn reconcile(
+        &mut self,
+        live_windows: &[AerospaceWindow],
+        live_workspaces: &[AerospaceWorkspace],
+    ) -> bool {
         let live_by_id: HashMap<AerospaceWindowId, &AerospaceWindow> = live_windows
             .iter()
             .map(|window| (window.window_id, window))
@@ -169,6 +175,39 @@ impl WatchedStage {
                     changed |= entry.follow_workspace(window);
                     changed |= entry.follow_title(window);
                 }
+            }
+        }
+
+        changed |= self.follow_layouts(live_workspaces);
+        changed
+    }
+
+    /// Only workspaces that hold a bound window are followed, so an empty
+    /// workspace after a restart does not overwrite the saved layout.
+    fn follow_layouts(&mut self, live_workspaces: &[AerospaceWorkspace]) -> bool {
+        let bound_workspaces: HashSet<&AerospaceWorkspaceId> = self
+            .entries
+            .iter()
+            .filter_map(|entry| entry.binding.as_ref())
+            .map(|binding| &binding.workspace)
+            .collect();
+        let mut changed = false;
+
+        for table in &mut self.workspaces {
+            let WorkspaceRef::Named(name) = &table.name else {
+                continue;
+            };
+            let Some(live) = live_workspaces.iter().find(|ws| &ws.workspace == name) else {
+                continue;
+            };
+            if table.layout.is_none() || !bound_workspaces.contains(name) {
+                continue;
+            }
+
+            let layout = Some(StageWorkspaceLayout::from(live.layout.clone()));
+            if table.layout != layout {
+                table.layout = layout;
+                changed = true;
             }
         }
 
@@ -232,6 +271,7 @@ impl WatchedStage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aerospace::AerospaceLayout;
 
     const STAGE: &str = r#"
 name = "work"
@@ -482,7 +522,7 @@ app = "Ghostty"
         watched.restore(&aerospace, Some("5")).unwrap();
         let stage_before = toml::to_string(&watched.to_stage()).unwrap();
 
-        assert!(!watched.reconcile(&[safari]));
+        assert!(!watched.reconcile(&[safari], &[]));
 
         assert_eq!(binding(&watched, 0).map(|b| b.window_id), Some(10));
         assert_eq!(binding(&watched, 2), None);
@@ -506,7 +546,7 @@ app = "Ghostty"
     fn reconcile_moves_entries_with_their_window() {
         let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
 
-        assert!(watched.reconcile(&[live(10, "Safari", "Docs", "3")]));
+        assert!(watched.reconcile(&[live(10, "Safari", "Docs", "3")], &[]));
 
         assert_eq!(
             watched.entries[0].workspace,
@@ -524,17 +564,17 @@ app = "Ghostty"
     fn reconcile_reports_no_change_when_nothing_moved() {
         let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
 
-        assert!(!watched.reconcile(&[live(10, "Safari", "Docs", "1")]));
+        assert!(!watched.reconcile(&[live(10, "Safari", "Docs", "1")], &[]));
     }
 
     #[test]
     fn reconcile_keeps_focused_while_the_window_stays_on_its_workspace() {
         let mut watched = restored(vec![slack("1")]);
 
-        assert!(!watched.reconcile(&[slack("5")]));
+        assert!(!watched.reconcile(&[slack("5")], &[]));
         assert_eq!(watched.entries[2].workspace, WorkspaceRef::Focused);
 
-        assert!(watched.reconcile(&[slack("2")]));
+        assert!(watched.reconcile(&[slack("2")], &[]));
         assert_eq!(
             watched.entries[2].workspace,
             WorkspaceRef::Named("2".into())
@@ -545,7 +585,7 @@ app = "Ghostty"
     fn reconcile_follows_tracked_titles() {
         let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
 
-        assert!(watched.reconcile(&[live(10, "Safari", "Inbox", "1")]));
+        assert!(watched.reconcile(&[live(10, "Safari", "Inbox", "1")], &[]));
 
         assert_eq!(watched.entries[0].window.title.as_deref(), Some("Inbox"));
     }
@@ -554,7 +594,7 @@ app = "Ghostty"
     fn reconcile_keeps_pinned_titles() {
         let mut watched = restored(vec![live(10, "Safari", "Docs — Safari", "1")]);
 
-        assert!(!watched.reconcile(&[live(10, "Safari", "Inbox", "1")]));
+        assert!(!watched.reconcile(&[live(10, "Safari", "Inbox", "1")], &[]));
 
         assert_eq!(watched.entries[0].window.title.as_deref(), Some("Docs"));
     }
@@ -563,8 +603,72 @@ app = "Ghostty"
     fn reconcile_leaves_entries_without_a_title_untitled() {
         let mut watched = restored(vec![slack("5")]);
 
-        assert!(!watched.reconcile(&[slack("5")]));
+        assert!(!watched.reconcile(&[slack("5")], &[]));
 
         assert_eq!(watched.entries[2].window.title, None);
+    }
+
+    fn workspace(name: &str, layout: AerospaceLayout) -> AerospaceWorkspace {
+        AerospaceWorkspace {
+            workspace: name.into(),
+            layout,
+        }
+    }
+
+    #[test]
+    fn reconcile_follows_the_layout_of_workspaces_with_bound_windows() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        assert!(watched.reconcile(
+            &[live(10, "Safari", "Docs", "1")],
+            &[workspace("1", AerospaceLayout::VAccordion)],
+        ));
+
+        assert_eq!(
+            watched.to_stage().workspaces[0].layout,
+            Some(StageWorkspaceLayout::VAccordion)
+        );
+    }
+
+    #[test]
+    fn reconcile_keeps_the_layout_of_workspaces_without_bound_windows() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        assert!(!watched.reconcile(
+            &[live(10, "Safari", "Docs", "1")],
+            &[workspace("3", AerospaceLayout::HTiles)],
+        ));
+
+        assert_eq!(
+            watched.to_stage().workspaces[2].layout,
+            Some(StageWorkspaceLayout::VAccordion)
+        );
+    }
+
+    #[test]
+    fn reconcile_does_not_add_a_layout_the_stage_does_not_declare() {
+        let mut watched = load(
+            r#"
+[[workspace]]
+name = "1"
+
+[[workspace.window]]
+app = "Safari"
+title = "Docs"
+"#,
+        );
+        watched
+            .restore(
+                &Aerospace::mock_with_windows(vec![live(10, "Safari", "Docs", "1")]),
+                None,
+            )
+            .unwrap();
+
+        assert!(!watched.reconcile(
+            &[live(10, "Safari", "Docs", "1")],
+            &[workspace("1", AerospaceLayout::VTiles)],
+        ));
+
+        assert_eq!(watched.to_stage().workspaces[0].layout, None);
     }
 }
