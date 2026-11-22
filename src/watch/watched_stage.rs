@@ -1,6 +1,8 @@
 //! A stage as a flat list of window entries. An entry keeps its id when it
 //! moves to another workspace, unlike its position in the stage file.
 
+use std::collections::HashSet;
+
 use anyhow::Result;
 
 use crate::{
@@ -115,6 +117,22 @@ impl WatchedStage {
         }
 
         Ok(())
+    }
+
+    /// An entry whose window closed is unbound but stays in the stage.
+    pub fn reconcile(&mut self, live_windows: &[AerospaceWindow]) {
+        let open_windows: HashSet<AerospaceWindowId> =
+            live_windows.iter().map(|window| window.window_id).collect();
+
+        for entry in &mut self.entries {
+            if entry
+                .binding
+                .as_ref()
+                .is_some_and(|binding| !open_windows.contains(&binding.window_id))
+            {
+                entry.binding = None;
+            }
+        }
     }
 
     fn bind(&mut self, id: EntryId, window: &AerospaceWindow, workspace: AerospaceWorkspaceId) {
@@ -413,5 +431,22 @@ app = "Ghostty"
                 .iter()
                 .all(|entry| entry.binding.is_none())
         );
+    }
+
+    #[test]
+    fn reconcile_unbinds_entries_whose_window_closed() {
+        let mut watched = load(STAGE);
+        let safari = live(10, "Safari", "Docs", "1");
+        let slack = live(12, "Slack", "General", "5").with_bundle_id("com.tinyspeck.slackmacgap");
+        let aerospace = Aerospace::mock_with_windows(vec![safari.clone(), slack]);
+        watched.restore(&aerospace, Some("5")).unwrap();
+        let stage_before = toml::to_string(&watched.to_stage()).unwrap();
+
+        watched.reconcile(&[safari]);
+
+        assert_eq!(binding(&watched, 0).map(|b| b.window_id), Some(10));
+        assert_eq!(binding(&watched, 2), None);
+        assert_eq!(watched.entries().len(), 3);
+        assert_eq!(toml::to_string(&watched.to_stage()).unwrap(), stage_before);
     }
 }
