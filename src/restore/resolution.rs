@@ -31,26 +31,58 @@ impl PendingTarget<'_> {
     }
 }
 
-struct WindowResolver {
-    fallback_workspace: Option<AerospaceWorkspaceId>,
+pub struct WindowResolver {
     title_rules: Vec<Box<dyn WindowResolverRule>>,
     leftover_rules: Vec<Box<dyn WindowResolverRule>>,
+    count_by_app: bool,
+    fallback_workspace: Option<AerospaceWorkspaceId>,
 }
 
 impl WindowResolver {
-    fn new(fallback_workspace: Option<String>) -> Self {
+    pub fn new(fallback_workspace: Option<AerospaceWorkspaceId>) -> Self {
+        Self::empty()
+            .with_title_rules()
+            .with_leftover_rules()
+            .with_count_by_app()
+            .with_fallback_workspace(fallback_workspace)
+    }
+
+    /// Resolves nothing until rule stages are added.
+    pub fn empty() -> Self {
         WindowResolver {
-            fallback_workspace,
-            title_rules: vec![
-                Box::new(TitleMatchResolverRule {}),
-                Box::new(TitleSimilarityResolverRule { threshold: 0.75 }),
-            ],
-            leftover_rules: vec![
-                Box::new(TargetWorkspaceResolverRule {}),
-                Box::new(UniqueBundleIdResolverRule {}),
-                Box::new(UniqueAppNameResolverRule {}),
-            ],
+            title_rules: Vec::new(),
+            leftover_rules: Vec::new(),
+            count_by_app: false,
+            fallback_workspace: None,
         }
+    }
+
+    pub fn with_title_rules(mut self) -> Self {
+        self.title_rules = vec![
+            Box::new(TitleMatchResolverRule {}),
+            Box::new(TitleSimilarityResolverRule { threshold: 0.75 }),
+        ];
+        self
+    }
+
+    /// Rules that commit only when exactly one window of the target's app is left.
+    pub fn with_leftover_rules(mut self) -> Self {
+        self.leftover_rules = vec![
+            Box::new(TargetWorkspaceResolverRule {}),
+            Box::new(UniqueBundleIdResolverRule {}),
+            Box::new(UniqueAppNameResolverRule {}),
+        ];
+        self
+    }
+
+    pub fn with_count_by_app(mut self) -> Self {
+        self.count_by_app = true;
+        self
+    }
+
+    pub fn with_fallback_workspace(mut self, workspace: Option<AerospaceWorkspaceId>) -> Self {
+        self.fallback_workspace = workspace;
+        self
     }
 
     fn apply_title_assignment(
@@ -219,10 +251,12 @@ impl WindowResolver {
             self.apply_title_assignment(&mut pending_targets, &mut available_windows);
         resolved_matches
             .extend(self.apply_unique_leftover_rules(&mut pending_targets, &mut available_windows));
-        resolved_matches.extend(Self::apply_count_by_app(
-            &mut pending_targets,
-            &mut available_windows,
-        ));
+        if self.count_by_app {
+            resolved_matches.extend(Self::apply_count_by_app(
+                &mut pending_targets,
+                &mut available_windows,
+            ));
+        }
 
         self.apply_optional_fallback_resolver(
             &mut resolved_matches,
@@ -257,8 +291,18 @@ pub struct WindowResolution<'a> {
 
 impl<'a> WindowResolution<'a> {
     pub fn resolve(stage: &'a Stage, windows: &[AerospaceWindow]) -> Self {
-        let resolver = WindowResolver::new(stage.default_workspace.clone());
+        Self::resolve_with(
+            WindowResolver::new(stage.default_workspace.clone()),
+            stage,
+            windows,
+        )
+    }
 
+    pub fn resolve_with(
+        resolver: WindowResolver,
+        stage: &'a Stage,
+        windows: &[AerospaceWindow],
+    ) -> Self {
         let (resolved_windows, pending_targets, unresolved_windows) =
             resolver.resolve(stage, windows);
 
@@ -355,5 +399,41 @@ mod tests {
 
         assert_eq!(origin_of(&resolution, 10), MatchOrigin::StageWindow(0));
         assert_eq!(origin_of(&resolution, 11), MatchOrigin::DefaultWorkspace);
+    }
+
+    #[test]
+    fn resolver_runs_only_the_rule_stages_it_was_built_with() {
+        let stage = Stage {
+            name: None,
+            description: None,
+            workspaces: vec![StageWorkspace {
+                name: "1".into(),
+                windows: vec![
+                    stage_window("Safari", "Inbox"),
+                    StageWindow {
+                        app: Some("Slack".into()),
+                        title: None,
+                        bundle_id: None,
+                    },
+                ],
+                layout: None,
+            }],
+            default_workspace: Some("9".into()),
+        };
+        let windows = vec![
+            live_window(10, "Safari", "Inbox"),
+            live_window(11, "Slack", "General"),
+            live_window(12, "Finder", "Downloads"),
+        ];
+
+        let resolution = WindowResolution::resolve_with(
+            WindowResolver::empty().with_title_rules(),
+            &stage,
+            &windows,
+        );
+
+        assert_eq!(resolution.resolved_windows.len(), 1);
+        assert_eq!(origin_of(&resolution, 10), MatchOrigin::StageWindow(0));
+        assert_eq!(resolution.pending_targets.len(), 1);
     }
 }

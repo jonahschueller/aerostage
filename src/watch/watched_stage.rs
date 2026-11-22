@@ -9,7 +9,7 @@ use crate::{
     aerospace::{
         Aerospace, AerospaceWindow, AerospaceWindowId, AerospaceWorkspace, AerospaceWorkspaceId,
     },
-    restore::{MatchOrigin, StageRestorer},
+    restore::{MatchOrigin, ResolvedWindowMatch, StageRestorer, WindowResolution, WindowResolver},
     stage::{
         StageWindow, StageWindowLocation, StageWorkspace, StageWorkspaceLayout, UnresolvedStage,
         UnresolvedStageWorkspace, WorkspaceRef,
@@ -26,6 +26,12 @@ pub struct Binding {
     pub workspace: AerospaceWorkspaceId,
     /// Whether the entry's title was an exact copy of the window title.
     pub title_tracked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WindowMove {
+    pub window_id: AerospaceWindowId,
+    pub workspace: AerospaceWorkspaceId,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -132,23 +138,92 @@ impl WatchedStage {
         let resolved = stage.resolve_with_locations(focused)?;
         let report = StageRestorer::new(aerospace, &resolved.stage).restore_stage(None)?;
 
-        for matched in report.matches {
+        self.bind_matches(
+            report.matches,
+            &report.live_windows,
+            &resolved.window_locations,
+            &entry_ids,
+        );
+        Ok(())
+    }
+
+    /// Binds windows that are not bound yet to unbound entries, by title first
+    /// and then by app. Titles change too often to be the only way in.
+    /// Returns the moves that put those windows on their entry's workspace.
+    pub fn bind_new_windows(
+        &mut self,
+        live_windows: &[AerospaceWindow],
+        focused: Option<&str>,
+    ) -> Result<Vec<WindowMove>> {
+        let bound_windows: HashSet<AerospaceWindowId> = self
+            .entries
+            .iter()
+            .filter_map(|entry| entry.binding.as_ref())
+            .map(|binding| binding.window_id)
+            .collect();
+        let free_windows: Vec<AerospaceWindow> = live_windows
+            .iter()
+            .filter(|window| !bound_windows.contains(&window.window_id))
+            .cloned()
+            .collect();
+        if free_windows.is_empty() || self.entries.iter().all(|entry| entry.binding.is_some()) {
+            return Ok(Vec::new());
+        }
+
+        let (stage, entry_ids) = self.build_stage(|entry| entry.binding.is_none());
+        let resolved = stage.resolve_with_locations(focused)?;
+        let resolution = WindowResolution::resolve_with(
+            WindowResolver::empty()
+                .with_title_rules()
+                .with_leftover_rules()
+                .with_count_by_app(),
+            &resolved.stage,
+            &free_windows,
+        );
+
+        Ok(self.bind_matches(
+            resolution.resolved_windows,
+            &free_windows,
+            &resolved.window_locations,
+            &entry_ids,
+        ))
+    }
+
+    /// Returns the moves for bound windows that are not on their entry's workspace yet.
+    fn bind_matches(
+        &mut self,
+        matches: Vec<ResolvedWindowMatch>,
+        live_windows: &[AerospaceWindow],
+        locations: &[StageWindowLocation],
+        entry_ids: &EntryIds,
+    ) -> Vec<WindowMove> {
+        let mut moves = Vec::new();
+
+        for matched in matches {
             let MatchOrigin::StageWindow(index) = matched.origin else {
                 continue;
             };
-            let Some(window) = report
-                .live_windows
+            let Some(window) = live_windows
                 .iter()
                 .find(|window| window.window_id == matched.window_id)
             else {
                 continue;
             };
 
-            let id = entry_ids.at(resolved.window_locations[index]);
-            self.bind(id, window, matched.target_workspace);
+            if window.workspace != matched.target_workspace {
+                moves.push(WindowMove {
+                    window_id: window.window_id,
+                    workspace: matched.target_workspace.clone(),
+                });
+            }
+            self.bind(
+                entry_ids.at(locations[index]),
+                window,
+                matched.target_workspace,
+            );
         }
 
-        Ok(())
+        moves
     }
 
     /// Returns whether the stage changed. An entry whose window closed is
@@ -227,8 +302,12 @@ impl WatchedStage {
         self.to_stage_with_entry_ids().0
     }
 
-    /// Entries whose workspace has no table get a new table at the end.
     pub fn to_stage_with_entry_ids(&self) -> (UnresolvedStage, EntryIds) {
+        self.build_stage(|_| true)
+    }
+
+    /// Entries whose workspace has no table get a new table at the end.
+    fn build_stage(&self, include: impl Fn(&StageEntry) -> bool) -> (UnresolvedStage, EntryIds) {
         let mut workspaces: Vec<UnresolvedStageWorkspace> = self
             .workspaces
             .iter()
@@ -240,7 +319,7 @@ impl WatchedStage {
             .collect();
         let mut entry_ids: Vec<Vec<EntryId>> = vec![Vec::new(); workspaces.len()];
 
-        for entry in &self.entries {
+        for entry in self.entries.iter().filter(|entry| include(entry)) {
             let index = match workspaces.iter().position(|ws| ws.name == entry.workspace) {
                 Some(index) => index,
                 None => {
@@ -670,5 +749,134 @@ title = "Docs"
         ));
 
         assert_eq!(watched.to_stage().workspaces[0].layout, None);
+    }
+
+    #[test]
+    fn bind_new_windows_binds_unbound_entries_by_title() {
+        let mut watched = restored(vec![]);
+
+        let moves = watched
+            .bind_new_windows(&[live(10, "Safari", "Docs", "4")], Some("5"))
+            .unwrap();
+
+        assert_eq!(
+            moves,
+            vec![WindowMove {
+                window_id: 10,
+                workspace: "1".into(),
+            }]
+        );
+        assert_eq!(
+            binding(&watched, 0),
+            Some(&Binding {
+                window_id: 10,
+                workspace: "1".into(),
+                title_tracked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn bind_new_windows_binds_by_app_when_no_title_matches() {
+        let mut watched = restored(vec![]);
+
+        let moves = watched
+            .bind_new_windows(&[live(11, "Ghostty", "zsh", "4"), slack("4")], Some("5"))
+            .unwrap();
+
+        assert_eq!(moves.len(), 2);
+        assert!(moves.contains(&WindowMove {
+            window_id: 11,
+            workspace: "1".into(),
+        }));
+        assert!(moves.contains(&WindowMove {
+            window_id: 12,
+            workspace: "5".into(),
+        }));
+        assert_eq!(binding(&watched, 1).unwrap().window_id, 11);
+        assert_eq!(binding(&watched, 2).unwrap().window_id, 12);
+    }
+
+    const TWO_SAFARIS: &str = r#"
+[[workspace]]
+name = "1"
+
+[[workspace.window]]
+app = "Safari"
+title = "Docs"
+
+[[workspace]]
+name = "2"
+
+[[workspace.window]]
+app = "Safari"
+title = "Mail"
+"#;
+
+    #[test]
+    fn bind_new_windows_prefers_titles_over_app_matches() {
+        let mut watched = load(TWO_SAFARIS);
+
+        let moves = watched
+            .bind_new_windows(
+                &[
+                    live(10, "Safari", "Calendar", "4"),
+                    live(11, "Safari", "Mail", "4"),
+                ],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(moves.len(), 2);
+        assert_eq!(binding(&watched, 0).unwrap().window_id, 10);
+        assert_eq!(binding(&watched, 1).unwrap().window_id, 11);
+    }
+
+    #[test]
+    fn bind_new_windows_guesses_among_entries_of_the_same_app() {
+        let mut watched = load(TWO_SAFARIS);
+
+        let moves = watched
+            .bind_new_windows(&[live(10, "Safari", "Calendar", "4")], None)
+            .unwrap();
+
+        assert_eq!(
+            moves,
+            vec![WindowMove {
+                window_id: 10,
+                workspace: "1".into(),
+            }]
+        );
+        assert_eq!(binding(&watched, 1), None);
+    }
+
+    #[test]
+    fn bind_new_windows_prefers_windows_already_on_the_entry_workspace() {
+        let mut watched = load(TWO_SAFARIS);
+
+        let moves = watched
+            .bind_new_windows(&[live(10, "Safari", "Calendar", "2")], None)
+            .unwrap();
+
+        assert!(moves.is_empty());
+        assert_eq!(binding(&watched, 1).unwrap().window_id, 10);
+    }
+
+    #[test]
+    fn bind_new_windows_leaves_bound_entries_alone() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        let moves = watched
+            .bind_new_windows(
+                &[
+                    live(10, "Safari", "Docs", "1"),
+                    live(20, "Safari", "Docs", "4"),
+                ],
+                Some("5"),
+            )
+            .unwrap();
+
+        assert!(moves.is_empty());
+        assert_eq!(binding(&watched, 0).unwrap().window_id, 10);
     }
 }
