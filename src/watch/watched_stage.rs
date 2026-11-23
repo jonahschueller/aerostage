@@ -63,7 +63,11 @@ impl StageEntry {
             .binding
             .as_ref()
             .is_some_and(|binding| binding.title_tracked);
-        if !tracked || self.window.title.as_deref() == Some(window.window_title.as_str()) {
+        // AeroSpace reports a blank title while a window opens or its app quits.
+        if !tracked
+            || window.window_title.trim().is_empty()
+            || self.window.title.as_deref() == Some(window.window_title.as_str())
+        {
             return false;
         }
 
@@ -665,6 +669,16 @@ app = "Ghostty"
     fn reconcile_follows_tracked_titles() {
         let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
 
+        assert!(watched.reconcile(&[live(10, "Safari", "Inbox", "1")], &[]));
+
+        assert_eq!(watched.entries[0].window.title.as_deref(), Some("Inbox"));
+    }
+
+    #[test]
+    fn reconcile_ignores_blank_titles() {
+        let mut watched = restored(vec![live(10, "Safari", "Docs", "1")]);
+
+        assert!(!watched.reconcile(&[live(10, "Safari", " ", "1")], &[]));
         assert!(watched.reconcile(&[live(10, "Safari", "Inbox", "1")], &[]));
 
         assert_eq!(watched.entries[0].window.title.as_deref(), Some("Inbox"));
