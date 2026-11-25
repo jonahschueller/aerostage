@@ -125,7 +125,8 @@ Watch keeps your edits:
 
 Limits:
 
-- Watch never adds windows to the stage. Capture the stage again to add new ones.
+- Only one watch can run per stage. While it runs, `capture` refuses to write that stage; `capture --stdout` still works.
+- Watch never adds windows to the stage. To add new ones, stop watch, capture the stage again, and start watch again.
 - Watch reads the stage file only when it starts. Edits made while it runs are overwritten by its next save, and saving drops comments from the file.
 - There is no stop command. Quit it with `pkill -f "aerostage watch"`.
 
