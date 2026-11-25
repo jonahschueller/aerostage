@@ -11,7 +11,7 @@ use crate::{
     aerospace::{Aerospace, AerospaceEventStream},
     cli::CommandHandler,
     config::Config,
-    stage::repository::StageRepository,
+    stage::{lock::StageLock, repository::StageRepository},
     watch::watched_stage::{WatchedStage, WindowMove},
 };
 
@@ -24,6 +24,7 @@ pub struct WatchCommandHandler {
 impl CommandHandler for WatchCommandHandler {
     fn run_command(&self, config: &Config) -> Result<()> {
         let stage_name = config.resolve_stage_name(self.stage.as_deref());
+        let _lock = StageLock::try_acquire(&config.stage_directory.join(stage_name))?;
         let stage_file = StageRepository::load_from_relative_path(config, stage_name)
             .context("Failed to load stage from file.")?;
         let aerospace = Aerospace::connect()?;
