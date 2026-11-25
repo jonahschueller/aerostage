@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::aerospace::{AerospaceLayout, AerospaceWorkspaceId};
 
 pub mod commands;
+pub mod lock;
 pub mod repository;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
