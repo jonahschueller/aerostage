@@ -3,8 +3,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    aerospace::Aerospace, capture::capture::StageCapturer, cli::CommandHandler,
-    common::parse_workspace_list, stage::repository::StageRepository,
+    aerospace::Aerospace,
+    capture::capture::StageCapturer,
+    cli::CommandHandler,
+    common::parse_workspace_list,
+    stage::{lock::StageLock, repository::StageRepository},
 };
 
 pub struct CaptureCommandHandler {
@@ -68,6 +71,11 @@ impl CommandHandler for CaptureCommandHandler {
             self.name.as_deref(),
             self.stdout_output,
         )?;
+        let _lock = target
+            .path
+            .as_deref()
+            .map(StageLock::try_acquire)
+            .transpose()?;
 
         let aerospace = Aerospace::connect()?;
 
