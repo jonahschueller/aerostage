@@ -120,6 +120,16 @@ pub enum Commands {
 }
 
 impl Commands {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Capture(_) => "capture",
+            Self::Restore(_) => "restore",
+            Self::Watch(_) => "watch",
+            Self::List(_) => "list",
+            Self::Show(_) => "show",
+        }
+    }
+
     fn create_handler(self) -> Box<dyn CommandHandler> {
         match self {
             Self::Capture(capture_args) => Box::new(CaptureCommandHandler::from(capture_args)),

@@ -163,7 +163,10 @@ impl StageRepository {
 
             match StageRepository::load_from_file(&path) {
                 Ok(stage) => stages.push(stage),
-                Err(err) => eprintln!("{err}"),
+                Err(err) => {
+                    log::warn!("skipped stage file: {err}");
+                    eprintln!("{err}");
+                }
             }
         }
 

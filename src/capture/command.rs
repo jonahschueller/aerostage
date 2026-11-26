@@ -92,7 +92,18 @@ impl CommandHandler for CaptureCommandHandler {
             .context("Failed to capture stage")?;
 
         match &target.path {
-            Some(file_path) => StageRepository::save_to_file(&stage, file_path)?,
+            Some(file_path) => {
+                StageRepository::save_to_file(&stage, file_path)?;
+                log::info!(
+                    "captured {} windows to {}",
+                    stage
+                        .workspaces
+                        .iter()
+                        .map(|ws| ws.windows.len())
+                        .sum::<usize>(),
+                    file_path.display()
+                );
+            }
             None => stage
                 .write(Box::new(std::io::stdout().lock()))
                 .context("Failed to capture stage.")?,
