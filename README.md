@@ -214,3 +214,23 @@ stage_directory = "/path/to/stages"
 Without a custom configuration, the default stage is `default.toml` and stages are stored in `~/.aerostage/stages`. The stage directory is created when saving a stage.
 
 When running with `cargo run`, stages are stored in the current working directory.
+
+## Logs
+
+AeroStage writes to `~/Library/Logs/aerostage/aerostage.log`, which Console.app also shows. Every command logs its errors. `capture`, `restore` and `watch` also log what they changed. This helps when AeroStage runs from AeroSpace, where nothing it prints is shown:
+
+```
+2026-11-26T10:12:03.123+01:00 INFO  [watch 4123] restored stage 'work': bound 5/7 entries
+2026-11-26T10:15:20.877+01:00 INFO  [watch 4123] bound Safari "Docs", moving it to workspace 2
+```
+
+Each line names the command and its process id, so several runs can share the file. When the log grows past 5 MB it moves to `aerostage.log.1`. The three newest old logs are kept, and older ones are deleted.
+
+Change the level or the file in the configuration:
+
+```toml
+log_level = "debug"   # off, error, warn, info (default), debug or trace
+log_file = "/path/to/aerostage.log"
+```
+
+`AEROSTAGE_LOG=debug` overrides the level for one run.
