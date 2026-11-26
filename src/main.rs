@@ -3,6 +3,8 @@ mod capture;
 mod cli;
 mod common;
 mod config;
+#[allow(dead_code)]
+mod logging;
 mod restore;
 mod stage;
 mod types;
