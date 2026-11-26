@@ -3,13 +3,15 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use figment::{
     Figment,
-    providers::{Format, Serialized, Toml},
+    providers::{Env, Format, Serialized, Toml},
 };
+use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 
 const AEROSTAGE_DIR: &str = ".aerostage";
 const AEROSTAGE_CONFIG_FILE_NAME: &str = "config.toml";
 const AEROSTAGE_DEFAULT_STAGE_NAME: &str = "default.toml";
+const AEROSTAGE_LOG_ENV: &str = "AEROSTAGE_LOG";
 #[cfg(not(all(debug_assertions, feature = "cwd-stages")))]
 const AEROSTAGE_DEFAULT_STAGES_DIR: &str = "stages";
 
@@ -17,6 +19,8 @@ const AEROSTAGE_DEFAULT_STAGES_DIR: &str = "stages";
 pub struct Config {
     pub stage_directory: PathBuf,
     pub default_stage: String,
+    pub log_file: PathBuf,
+    pub log_level: LevelFilter,
 }
 
 impl Default for Config {
@@ -32,6 +36,8 @@ impl Config {
         Config {
             stage_directory: stage_dir,
             default_stage: AEROSTAGE_DEFAULT_STAGE_NAME.to_string(),
+            log_file: Self::default_log_file(),
+            log_level: LevelFilter::Info,
         }
     }
 
@@ -55,12 +61,23 @@ impl Config {
         if let Some(user_config) = user_config {
             config_builder = config_builder.merge(Toml::file(&user_config));
         }
+        config_builder = config_builder.merge(
+            Env::raw()
+                .only(&[AEROSTAGE_LOG_ENV])
+                .map(|_| "log_level".into()),
+        );
 
         let config = config_builder
             .extract()
             .context("Failed to build aerostage config.")?;
 
         Ok(config)
+    }
+
+    fn default_log_file() -> PathBuf {
+        dirs::home_dir()
+            .expect("Failed to derive user home dir.")
+            .join("Library/Logs/aerostage/aerostage.log")
     }
 
     fn default_stage_directory() -> PathBuf {
@@ -133,6 +150,19 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(config.default_stage, "focus.toml");
+    }
+
+    #[test]
+    fn load_reads_log_settings_from_config() {
+        let path =
+            std::env::temp_dir().join(format!("aerostage-config-log-{}.toml", std::process::id()));
+        std::fs::write(&path, "log_file = \"/tmp/a.log\"\nlog_level = \"debug\"\n").unwrap();
+
+        let config = Config::load(Some(path.clone())).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(config.log_file, PathBuf::from("/tmp/a.log"));
+        assert_eq!(config.log_level, LevelFilter::Debug);
     }
 
     #[test]

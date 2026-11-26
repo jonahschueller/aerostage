@@ -3,7 +3,6 @@ mod capture;
 mod cli;
 mod common;
 mod config;
-#[allow(dead_code)]
 mod logging;
 mod restore;
 mod stage;
@@ -27,7 +26,10 @@ fn main() {
         }
     };
 
+    logging::init(&config.log_file, config.log_level, cli.command.name());
+
     if let Err(err) = cli::execute_command(cli.command, &config) {
+        log::error!("Failed to execute command: {err:#}");
         report_error("Failed to execute command", &err);
         exit(1);
     }
