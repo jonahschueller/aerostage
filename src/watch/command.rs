@@ -6,9 +6,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use log::{debug, error, info};
 
 use crate::{
-    aerospace::{Aerospace, AerospaceEventStream},
+    aerospace::{Aerospace, AerospaceEventStream, AerospaceWindow},
     cli::CommandHandler,
     config::Config,
     stage::{lock::StageLock, repository::StageRepository},
@@ -27,6 +28,10 @@ impl CommandHandler for WatchCommandHandler {
         let _lock = StageLock::try_acquire(&config.stage_directory.join(stage_name))?;
         let stage_file = StageRepository::load_from_relative_path(config, stage_name)
             .context("Failed to load stage from file.")?;
+        info!(
+            "watching stage '{stage_name}' ({})",
+            stage_file.path.display()
+        );
         let aerospace = Aerospace::connect()?;
 
         // Subscribe first, so changes made during the restore are not missed.
@@ -40,14 +45,18 @@ impl CommandHandler for WatchCommandHandler {
             stage_file.path,
         )
         .with_context(|| format!("Failed to restore stage '{stage_name}'"))?;
+        let (bound, total) = watcher.bound_entries();
+        info!("restored stage '{stage_name}': bound {bound}/{total} entries");
 
         for burst in bursts(events, QUIET_PERIOD) {
             burst.context("Failed to read AeroSpace events.")?;
             if let Err(err) = watcher.sync() {
+                error!("Failed to sync stage '{stage_name}': {err:#}");
                 eprintln!("Failed to sync stage '{stage_name}': {err:#}");
             }
         }
 
+        info!("stopped watching stage '{stage_name}': AeroSpace closed the event stream");
         Ok(())
     }
 }
@@ -78,12 +87,27 @@ impl StageWatcher {
 
         let focused = focused_workspace(&self.aerospace, &self.stage)?;
         let moves = self.stage.bind_new_windows(&windows, focused.as_deref())?;
+        for window_move in &moves {
+            log_move(window_move, &windows);
+        }
         self.apply(&moves)?;
 
         if changed {
             StageRepository::save_to_file(&self.stage.to_stage(), &self.path)?;
+            info!("saved {}", self.path.display());
         }
+        let (bound, total) = self.bound_entries();
+        debug!("synced: bound {bound}/{total} entries");
         Ok(())
+    }
+
+    fn bound_entries(&self) -> (usize, usize) {
+        let entries = self.stage.entries();
+        let bound = entries
+            .iter()
+            .filter(|entry| entry.binding.is_some())
+            .count();
+        (bound, entries.len())
     }
 
     /// A window that has focus keeps it while it moves.
@@ -110,6 +134,19 @@ impl StageWatcher {
         }
         Ok(())
     }
+}
+
+fn log_move(window_move: &WindowMove, windows: &[AerospaceWindow]) {
+    let Some(window) = windows
+        .iter()
+        .find(|window| window.window_id == window_move.window_id)
+    else {
+        return;
+    };
+    info!(
+        "bound {} \"{}\", moving it to workspace {}",
+        window.app_name, window.window_title, window_move.workspace
+    );
 }
 
 fn focused_workspace(aerospace: &Aerospace, stage: &WatchedStage) -> Result<Option<String>> {
@@ -156,10 +193,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::{
-        aerospace::{AerospaceEvent, AerospaceWindow},
-        stage::UnresolvedStage,
-    };
+    use crate::{aerospace::AerospaceEvent, stage::UnresolvedStage};
 
     fn watched(toml: &str) -> WatchedStage {
         WatchedStage::from(toml::from_str::<UnresolvedStage>(toml).unwrap())
