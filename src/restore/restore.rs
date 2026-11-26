@@ -166,12 +166,14 @@ impl<'a> StageRestorer<'a> {
 
         for target in resolution.pending_targets {
             let window = target.target_window;
-            eprintln!(
-                "Could not restore window {} | {} | {}",
+            let description = format!(
+                "{} | {} | {}",
                 window.title.as_deref().unwrap_or("-"),
                 window.app.as_deref().unwrap_or("-"),
                 window.bundle_id.as_deref().unwrap_or("-"),
-            )
+            );
+            log::warn!("could not restore window {description}");
+            eprintln!("Could not restore window {description}");
         }
 
         Ok(RestoreReport {

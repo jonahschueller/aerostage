@@ -67,9 +67,13 @@ impl CommandHandler for RestoreCommandHandler {
 
         let stage_restorer = StageRestorer::new(&aerospace, &stage);
 
-        stage_restorer
+        let report = stage_restorer
             .restore_stage(source_workspaces.as_deref())
             .with_context(|| format!("Failed to restore stage '{}'", &stage_name))?;
+        log::info!(
+            "restored stage '{stage_name}': matched {} windows",
+            report.matches.len()
+        );
 
         Ok(())
     }
